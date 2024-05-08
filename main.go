@@ -204,7 +204,7 @@ func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDi
 	//   $d{$bom}{$dir}[1] += $cols[1] / $gb_convert;
 	// }
 
-	yearsAgo := int(time.Now().Unix() - (secsPerYear * age))
+	epochTimeDesiredYearsAgo := int(time.Now().Unix() - (secsPerYear * age))
 
 	path := make([]byte, base64.StdEncoding.DecodedLen(1024))
 
@@ -259,7 +259,7 @@ func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDi
 			continue
 		}
 
-		if min(mtime, ctime) > yearsAgo {
+		if min(mtime, ctime) > epochTimeDesiredYearsAgo {
 			continue
 		}
 
@@ -297,108 +297,5 @@ func displayResults(results bomToDirToStats) {
 			gb := fmt.Sprintf("%.2f", stats.size)
 			fmt.Printf("%s\t%s\t%d\t%s\n", bom, dir, stats.count, gb)
 		}
-	}
-}
-
-func sumColumnThree(path string) int64 {
-	file, err := os.Open(path)
-	if err != nil {
-		die(err)
-	}
-	defer func() {
-		errc := file.Close()
-		if errc != nil {
-			l.Printf("WARNING: failed to close %s", path)
-		}
-	}()
-
-	var sum int64
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		b := scanner.Bytes()
-		i := 0
-		for b[i] != '\t' {
-			i++
-		}
-		i++
-		for b[i] != '\t' {
-			i++
-		}
-		var depth int
-		for i++; i < len(b); i++ {
-			depth = depth*10 + int(b[i]) - '0'
-		}
-		sum += int64(depth)
-	}
-	return sum
-}
-
-func calculateRegions(path string, bpPerRegion int64) {
-	var input io.Reader
-	if path == "-" {
-		input = bufio.NewReader(os.Stdin)
-	} else {
-		var err error
-		input, err = os.Open(path)
-		if err != nil {
-			die(err)
-		}
-		defer func() {
-			errc := input.(*os.File).Close()
-			if errc != nil {
-				l.Printf("WARNING: failed to close %s", path)
-			}
-		}()
-	}
-
-	var prevSeq string
-	var startPos, lastPos, bpInRegion int64
-
-	scanner := bufio.NewScanner(input)
-	for scanner.Scan() {
-		// parse the line
-		b := scanner.Bytes()
-		i := 0
-		for b[i] != '\t' {
-			i++
-		}
-		seq := string(b[0:i])
-
-		var pos int64
-		for i++; b[i] != '\t'; i++ {
-			pos = pos*10 + int64(b[i]) - '0'
-		}
-
-		var depth int
-		for i++; i < len(b); i++ {
-			depth = depth*10 + int(b[i]) - '0'
-		}
-
-		// print regions that end on sequence changes or when over bpPerRegion.
-		// region coordinates are 1-based, inclusive of start and end.
-		if prevSeq != seq {
-			if prevSeq == "" {
-				prevSeq = seq
-				startPos = pos
-			} else {
-				fmt.Printf("%s:%d-%d\n", prevSeq, startPos, lastPos)
-				startPos = pos
-				prevSeq = seq
-				bpInRegion = 0
-			}
-		}
-
-		bpInRegion += int64(depth)
-		if bpInRegion > bpPerRegion {
-			fmt.Printf("%s:%d-%d\n", seq, startPos, pos)
-			startPos = pos + 1
-			bpInRegion = 0
-		}
-
-		lastPos = pos
-	}
-
-	if lastPos > startPos {
-		fmt.Printf("%s:%d-%d\n", prevSeq, startPos, lastPos)
 	}
 }
