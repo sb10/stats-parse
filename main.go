@@ -162,6 +162,14 @@ type stats struct {
 	size  float64
 }
 
+type Info struct {
+	Path  string
+	Size  uint64
+	GID   uint64
+	MTime uint64
+	CTime uint64
+}
+
 type bomToDirToStats map[string]map[string]stats
 
 func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
@@ -172,6 +180,116 @@ func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
 
 		break
 	}
+}
+
+type Parser struct {
+	f          *os.File
+	reader     *gzip.Reader
+	scanner    *bufio.Scanner
+	pathBuffer []byte
+	epochNow   int64
+}
+
+func New(path string) (*Parser, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Parser{
+		f:          f,
+		reader:     gr,
+		scanner:    bufio.NewScanner(gr),
+		pathBuffer: make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength)),
+		epochNow:   time.Now().Unix(),
+	}, nil
+}
+
+func (p *Parser) Close() error {
+	err := p.reader.Close()
+	if err != nil {
+		return err
+	}
+
+	return p.f.Close()
+}
+
+func (p *Parser) ScanForOldFiles(years int) bool {
+	keepGoing := p.scanner.Scan()
+	if !keepGoing {
+		return false
+	}
+
+	return p.filterForOldFiles(years)
+}
+
+func (p *Parser) filterForOldFiles(years int) bool {
+	epochTimeDesiredYearsAgo := int(p.epochNow) - (secsPerYear * years)
+
+	b := p.scanner.Bytes()
+
+	i := 0
+	for b[i] != '\t' {
+		i++
+	}
+
+	// encodedPath := b[0:i]
+
+	var size int64
+
+	for i++; b[i] != '\t'; i++ {
+		size = size*10 + int64(b[i]) - '0'
+	}
+
+	i++
+	for b[i] != '\t' {
+		i++
+	}
+
+	var gid int
+
+	for i++; b[i] != '\t'; i++ {
+		gid = gid*10 + int(b[i]) - '0'
+	}
+
+	i++
+	for b[i] != '\t' {
+		i++
+	}
+
+	var mtime int
+
+	for i++; b[i] != '\t'; i++ {
+		mtime = mtime*10 + int(b[i]) - '0'
+	}
+
+	var ctime int
+
+	for i++; b[i] != '\t'; i++ {
+		ctime = ctime*10 + int(b[i]) - '0'
+	}
+
+	i++
+
+	if b[i] != fileType {
+		return p.ScanForOldFiles(years)
+	}
+
+	if min(mtime, ctime) > epochTimeDesiredYearsAgo {
+		return p.ScanForOldFiles(years)
+	}
+
+	return true
+
+	// l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
+	// if err != nil {
+	// 	//TODO: do something with this error
+	// }
 }
 
 func parseStatsFile(path string, gidToBom map[int]string, age int64, results bomToDirToStats) {
@@ -214,8 +332,12 @@ func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDi
 
 	path := make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength))
 
+	lineNum := 0
+	numFound := 0
+
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
+		lineNum++
 		b := scanner.Bytes()
 
 		i := 0
@@ -279,14 +401,21 @@ func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDi
 			die(err)
 		}
 
-		fmt.Printf("%s, %d, %d, %d, %d, %s\n", string(path[:l]), size, gid, mtime, ctime, bom)
+		fmt.Printf("%d: %s, %d, %d, %d, %d, %s\n", lineNum, string(path[:l]), size, gid, mtime, ctime, bom)
+		numFound++
 
-		break
+		if numFound > 5 {
+			break
+		}
 	}
 
 	if scanner.Err() != nil {
 		die(scanner.Err())
 	}
+}
+
+func (p *Parser) FileInfo() *Info {
+	return nil
 }
 
 func displayResults(results bomToDirToStats) {
