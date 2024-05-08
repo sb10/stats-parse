@@ -1,5 +1,7 @@
 // Copyright © 2024 Genome Research Limited
-// Author: Sendu Bala <sb10@sanger.ac.uk>.
+// Authors:
+//  Sendu Bala <sb10@sanger.ac.uk>.
+//  Dan Elia <de7@sanger.ac.uk>.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -56,11 +58,15 @@ Usage: stats-parse -a <int> -b <path> wrstat.stats.gz
 Options:
   -h          this help text
   -a <int>    age of files to report on (years, per oldest of c&mtime)
-  -b <string> path to bom.gids file`
+  -b <string> path to bom.gids file
+`
 
-const fileType = byte('f')
-
-const secsPerYear = 3600 * 24 * 365
+const (
+	fileType                   = byte('f')
+	defaultAge                 = 7
+	secsPerYear                = 3600 * 24 * 365
+	maxBase64EncodedPathLength = 1024
+)
 
 var l = log.New(os.Stderr, "", 0)
 
@@ -73,7 +79,7 @@ func main() {
 	)
 
 	flag.StringVar(&bomGidsFile, "b", "", "path to bom.gids file")
-	flag.Int64Var(&age, "a", 7, "age of files to report on (years, per oldest of c&mtime)")
+	flag.Int64Var(&age, "a", defaultAge, "age of files to report on (years, per oldest of c&mtime)")
 	flag.Parse()
 
 	if *help {
@@ -99,10 +105,10 @@ func main() {
 // exitHelp prints help text and exits 0, unless a message is passed in which
 // case it also prints that and exits 1.
 func exitHelp(msg string) {
-	fmt.Println(helpText)
+	print(helpText) //nolint:forbidigo
 
 	if msg != "" {
-		fmt.Printf("\n%s\n", msg)
+		fmt.Printf("\n%s\n", msg) //nolint:forbidigo
 		os.Exit(1)
 	}
 
@@ -206,7 +212,7 @@ func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDi
 
 	epochTimeDesiredYearsAgo := int(time.Now().Unix() - (secsPerYear * age))
 
-	path := make([]byte, base64.StdEncoding.DecodedLen(1024))
+	path := make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength))
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
