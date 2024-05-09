@@ -185,8 +185,8 @@ type bomToDirToStats map[string]map[string]stats
 type Parser struct {
 	scanner    *bufio.Scanner
 	pathBuffer []byte
-	epochNow   int64
-	Path       string
+	now        time.Time
+	Path       []byte
 	Size       int64
 	GID        int
 	MTime      int
@@ -201,26 +201,23 @@ func New(r io.Reader) *Parser {
 	return &Parser{
 		scanner:    scanner,
 		pathBuffer: make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength)),
-		epochNow:   time.Now().Unix(),
+		now:        time.Now(),
 	}
 }
 
 //go:noinline
-func (p *Parser) ScanForOldFiles(years int) bool {
+func (p *Parser) ScanForOldFiles(d time.Duration) bool {
 	keepGoing := p.scanner.Scan()
 	if !keepGoing {
 		return false
 	}
 
-	return p.filterForOldFiles(years)
+	return p.filterForOldFiles(d)
 }
 
 //go:noinline
-func (p *Parser) filterForOldFiles(years int) bool {
-	epochTimeDesiredYearsAgo := int(p.epochNow) - (secsPerYear * years)
-	if epochTimeDesiredYearsAgo == 0 {
-		return false
-	}
+func (p *Parser) filterForOldFiles(d time.Duration) bool {
+	epochTimeDesired := p.now.Add(-d).Unix()
 
 	b := p.scanner.Bytes()
 
@@ -268,11 +265,11 @@ func (p *Parser) filterForOldFiles(years int) bool {
 	i++
 
 	if b[i] != fileType {
-		return p.ScanForOldFiles(years)
+		return p.ScanForOldFiles(d)
 	}
 
-	if min(p.MTime, p.CTime) > epochTimeDesiredYearsAgo {
-		return p.ScanForOldFiles(years)
+	if int64(min(p.MTime, p.CTime)) > epochTimeDesired {
+		return p.ScanForOldFiles(d)
 	}
 
 	l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
@@ -281,7 +278,7 @@ func (p *Parser) filterForOldFiles(years int) bool {
 		//TODO: do something with this error
 	}
 
-	p.Path = string(p.pathBuffer[:l])
+	p.Path = p.pathBuffer[:l]
 
 	return true
 }

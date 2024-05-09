@@ -31,9 +31,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
+
+const epochWhenTestFileWasCreated = 1715261665
 
 const firstLineOfTestFile = `L2x1c3RyZS9zY3JhdGNoMTIyL3RvbC90ZWFtcy9ibGF4dGVyL3VzZXJzL2FtNzUvYXNzZW1ibGllcy9kYXRhc2V0L2lsWGVzU2V4czEuMl9nZW5vbWljLmZuYQ==	646315412	21967	15078	1699895920	1698792671	1698917473	f	144116446803265182	1	2983906128` //nolint:lll
 
@@ -54,17 +57,17 @@ func TestParser(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(p, ShouldNotBeNil)
 
-		Convey("And an age in years, you can get extract info for files older than the specified age", func() {
-			var i int
-			for p.ScanForOldFiles(7) {
+		Convey("you can get extract info for files older than the specified age", func() {
+			i := 0
+			for p.ScanForOldFiles(yearsRelativeToTestFileCreation(7)) {
 				if i == 0 {
-					So(p.Path, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9/hfile_net.c") //nolint:lll
+					So(string(p.Path), ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9/hfile_net.c") //nolint:lll
 					So(p.Size, ShouldEqual, 3192)
 					So(p.GID, ShouldEqual, 15078)
 					So(p.MTime, ShouldEqual, 1437483022)
 					So(p.CTime, ShouldEqual, 1703699980)
 				} else if i == 1 {
-					So(p.Path, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/test/view.filter.10.out") //nolint:lll
+					So(string(p.Path), ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/test/view.filter.10.out") //nolint:lll
 					So(p.Size, ShouldEqual, 3754)
 					So(p.MTime, ShouldEqual, 1402590965)
 				}
@@ -73,7 +76,22 @@ func TestParser(t *testing.T) {
 			}
 			So(i, ShouldEqual, 6)
 		})
+
+		Convey("the age filter gives different results with different ages", func() {
+			i := 0
+			for p.ScanForOldFiles(yearsRelativeToTestFileCreation(6)) {
+				i++
+			}
+			So(i, ShouldEqual, 9)
+		})
 	})
+}
+
+func yearsRelativeToTestFileCreation(years int) time.Duration {
+	timeDifference := time.Since(time.Unix(epochWhenTestFileWasCreated, 0))
+	yearsDifference := time.Duration(years) * 365 * 24 * time.Hour
+
+	return timeDifference + yearsDifference
 }
 
 func BenchmarkScanAndFileInfo(b *testing.B) {
