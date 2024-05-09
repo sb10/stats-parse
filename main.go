@@ -25,7 +25,6 @@ package main
 
 import (
 	"bufio"
-	"compress/gzip"
 	"encoding/base64"
 	"flag"
 	"fmt"
@@ -65,6 +64,7 @@ const (
 	fileType                   = byte('f')
 	defaultAge                 = 7
 	secsPerYear                = 3600 * 24 * 365
+	maxLineLength              = 64 * 1024
 	maxBase64EncodedPathLength = 1024
 )
 
@@ -98,8 +98,8 @@ func main() {
 		exitHelp("ERROR: you must supply some stats.gz files")
 	}
 
-	gidToBom := parseBomGids(bomGidsFile)
-	parseStatsFiles(flag.Args(), gidToBom, age)
+	// gidToBom := parseBomGids(bomGidsFile)
+	// parseStatsFiles(flag.Args(), gidToBom, age)
 }
 
 // exitHelp prints help text and exits 0, unless a message is passed in which
@@ -172,54 +172,40 @@ type Info struct {
 
 type bomToDirToStats map[string]map[string]stats
 
-func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
-	results := make(bomToDirToStats)
+// func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
+// 	results := make(bomToDirToStats)
 
-	for _, path := range paths {
-		parseStatsFile(path, gidToBom, age, results)
+// 	for _, path := range paths {
+// 		parseStatsFile(path, gidToBom, age, results)
 
-		break
-	}
-}
+// 		break
+// 	}
+// }
 
 type Parser struct {
-	f          *os.File
-	reader     *gzip.Reader
 	scanner    *bufio.Scanner
 	pathBuffer []byte
 	epochNow   int64
-	info       Info
+	Path       string
+	Size       int64
+	GID        int
+	MTime      int
+	CTime      int
 }
 
-func New(path string) (*Parser, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-
-	gr, err := gzip.NewReader(f)
-	if err != nil {
-		return nil, err
-	}
+//go:noinline
+func New(r io.Reader) *Parser {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, maxLineLength), maxLineLength)
 
 	return &Parser{
-		f:          f,
-		reader:     gr,
-		scanner:    bufio.NewScanner(gr),
+		scanner:    scanner,
 		pathBuffer: make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength)),
 		epochNow:   time.Now().Unix(),
-	}, nil
-}
-
-func (p *Parser) Close() error {
-	err := p.reader.Close()
-	if err != nil {
-		return err
 	}
-
-	return p.f.Close()
 }
 
+//go:noinline
 func (p *Parser) ScanForOldFiles(years int) bool {
 	keepGoing := p.scanner.Scan()
 	if !keepGoing {
@@ -229,8 +215,12 @@ func (p *Parser) ScanForOldFiles(years int) bool {
 	return p.filterForOldFiles(years)
 }
 
+//go:noinline
 func (p *Parser) filterForOldFiles(years int) bool {
 	epochTimeDesiredYearsAgo := int(p.epochNow) - (secsPerYear * years)
+	if epochTimeDesiredYearsAgo == 0 {
+		return false
+	}
 
 	b := p.scanner.Bytes()
 
@@ -241,10 +231,10 @@ func (p *Parser) filterForOldFiles(years int) bool {
 
 	encodedPath := b[0:i]
 
-	var size int64
+	p.Size = 0
 
 	for i++; b[i] != '\t'; i++ {
-		size = size*10 + int64(b[i]) - '0'
+		p.Size = p.Size*10 + int64(b[i]) - '0'
 	}
 
 	i++
@@ -252,10 +242,10 @@ func (p *Parser) filterForOldFiles(years int) bool {
 		i++
 	}
 
-	var gid int
+	p.GID = 0
 
 	for i++; b[i] != '\t'; i++ {
-		gid = gid*10 + int(b[i]) - '0'
+		p.GID = p.GID*10 + int(b[i]) - '0'
 	}
 
 	i++
@@ -263,16 +253,16 @@ func (p *Parser) filterForOldFiles(years int) bool {
 		i++
 	}
 
-	var mtime int
+	p.MTime = 0
 
 	for i++; b[i] != '\t'; i++ {
-		mtime = mtime*10 + int(b[i]) - '0'
+		p.MTime = p.MTime*10 + int(b[i]) - '0'
 	}
 
-	var ctime int
+	p.CTime = 0
 
 	for i++; b[i] != '\t'; i++ {
-		ctime = ctime*10 + int(b[i]) - '0'
+		p.CTime = p.CTime*10 + int(b[i]) - '0'
 	}
 
 	i++
@@ -281,7 +271,7 @@ func (p *Parser) filterForOldFiles(years int) bool {
 		return p.ScanForOldFiles(years)
 	}
 
-	if min(mtime, ctime) > epochTimeDesiredYearsAgo {
+	if min(p.MTime, p.CTime) > epochTimeDesiredYearsAgo {
 		return p.ScanForOldFiles(years)
 	}
 
@@ -291,156 +281,146 @@ func (p *Parser) filterForOldFiles(years int) bool {
 		//TODO: do something with this error
 	}
 
-	info := Info{}
-	info.Path = string(p.pathBuffer[:l])
-	info.CTime = ctime
-	info.MTime = mtime
-	info.Size = size
-	info.GID = gid
-	p.info = info
+	p.Path = string(p.pathBuffer[:l])
 
 	return true
 }
 
-func (p *Parser) FileInfo() *Info {
-	return &p.info
-}
+// func parseStatsFile(path string, gidToBom map[int]string, age int64, results bomToDirToStats) {
+// 	f, err := os.Open(path)
+// 	if err != nil {
+// 		die(err)
+// 	}
 
-func parseStatsFile(path string, gidToBom map[int]string, age int64, results bomToDirToStats) {
-	f, err := os.Open(path)
-	if err != nil {
-		die(err)
-	}
+// 	defer f.Close()
 
-	defer f.Close()
+// 	gr, err := gzip.NewReader(f)
+// 	if err != nil {
+// 		die(err)
+// 	}
 
-	gr, err := gzip.NewReader(f)
-	if err != nil {
-		die(err)
-	}
+// 	defer gr.Close()
 
-	defer gr.Close()
+// 	parseStats(gr, gidToBom, age, results)
 
-	parseStats(gr, gidToBom, age, results)
+// 	displayResults(results)
+// }
 
-	displayResults(results)
-}
+// func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDirToStats) {
+// 	// my @cols = split("\t", $_);
+// 	// next if $cols[7] ne "f";
+// 	// my $t = min($cols[5], $cols[6]);
+// 	// next if $t > $years_ago;
+// 	// my $bom = $gid_to_bom{$cols[3]} || next;
+// 	// my $path = decode_base64($cols[0]);
+// 	// my (undef, $dir, undef) = File::Spec->splitpath($path);
+// 	// my @dirs = File::Spec->splitdir($dir);
+// 	// for my $i (0 .. $#dirs) {
+// 	//   my $dir = join("/", @dirs[0..$i]);
+// 	//   $dir =~ s/\/*$//;
+// 	//   $d{$bom}{$dir}[0]++;
+// 	//   $d{$bom}{$dir}[1] += $cols[1] / $gb_convert;
+// 	// }
 
-func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDirToStats) {
-	// my @cols = split("\t", $_);
-	// next if $cols[7] ne "f";
-	// my $t = min($cols[5], $cols[6]);
-	// next if $t > $years_ago;
-	// my $bom = $gid_to_bom{$cols[3]} || next;
-	// my $path = decode_base64($cols[0]);
-	// my (undef, $dir, undef) = File::Spec->splitpath($path);
-	// my @dirs = File::Spec->splitdir($dir);
-	// for my $i (0 .. $#dirs) {
-	//   my $dir = join("/", @dirs[0..$i]);
-	//   $dir =~ s/\/*$//;
-	//   $d{$bom}{$dir}[0]++;
-	//   $d{$bom}{$dir}[1] += $cols[1] / $gb_convert;
-	// }
+// 	epochTimeDesiredYearsAgo := int(time.Now().Unix() - (secsPerYear * age))
 
-	epochTimeDesiredYearsAgo := int(time.Now().Unix() - (secsPerYear * age))
+// 	path := make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength))
 
-	path := make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength))
+// 	lineNum := 0
+// 	numFound := 0
 
-	lineNum := 0
-	numFound := 0
+// 	scanner := bufio.NewScanner(r)
+// 	for scanner.Scan() {
+// 		lineNum++
+// 		b := scanner.Bytes()
 
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		lineNum++
-		b := scanner.Bytes()
+// 		i := 0
+// 		for b[i] != '\t' {
+// 			i++
+// 		}
 
-		i := 0
-		for b[i] != '\t' {
-			i++
-		}
+// 		encodedPath := b[0:i]
 
-		encodedPath := b[0:i]
+// 		var size int64
 
-		var size int64
+// 		for i++; b[i] != '\t'; i++ {
+// 			size = size*10 + int64(b[i]) - '0'
+// 		}
 
-		for i++; b[i] != '\t'; i++ {
-			size = size*10 + int64(b[i]) - '0'
-		}
+// 		i++
+// 		for b[i] != '\t' {
+// 			i++
+// 		}
 
-		i++
-		for b[i] != '\t' {
-			i++
-		}
+// 		var gid int
 
-		var gid int
+// 		for i++; b[i] != '\t'; i++ {
+// 			gid = gid*10 + int(b[i]) - '0'
+// 		}
 
-		for i++; b[i] != '\t'; i++ {
-			gid = gid*10 + int(b[i]) - '0'
-		}
+// 		i++
+// 		for b[i] != '\t' {
+// 			i++
+// 		}
 
-		i++
-		for b[i] != '\t' {
-			i++
-		}
+// 		var mtime int
 
-		var mtime int
+// 		for i++; b[i] != '\t'; i++ {
+// 			mtime = mtime*10 + int(b[i]) - '0'
+// 		}
 
-		for i++; b[i] != '\t'; i++ {
-			mtime = mtime*10 + int(b[i]) - '0'
-		}
+// 		var ctime int
 
-		var ctime int
+// 		for i++; b[i] != '\t'; i++ {
+// 			ctime = ctime*10 + int(b[i]) - '0'
+// 		}
 
-		for i++; b[i] != '\t'; i++ {
-			ctime = ctime*10 + int(b[i]) - '0'
-		}
+// 		i++
 
-		i++
+// 		if b[i] != fileType {
+// 			continue
+// 		}
 
-		if b[i] != fileType {
-			continue
-		}
+// 		if min(mtime, ctime) > epochTimeDesiredYearsAgo {
+// 			continue
+// 		}
 
-		if min(mtime, ctime) > epochTimeDesiredYearsAgo {
-			continue
-		}
+// 		bom, found := gidToBom[gid]
+// 		if !found {
+// 			continue
+// 		}
 
-		bom, found := gidToBom[gid]
-		if !found {
-			continue
-		}
+// 		l, err := base64.StdEncoding.Decode(path, encodedPath)
+// 		if err != nil {
+// 			die(err)
+// 		}
 
-		l, err := base64.StdEncoding.Decode(path, encodedPath)
-		if err != nil {
-			die(err)
-		}
+// 		fmt.Printf("%d: %s, %d, %d, %d, %d, %s\n", lineNum, string(path[:l]), size, gid, mtime, ctime, bom)
+// 		numFound++
 
-		fmt.Printf("%d: %s, %d, %d, %d, %d, %s\n", lineNum, string(path[:l]), size, gid, mtime, ctime, bom)
-		numFound++
+// 		if numFound > 5 {
+// 			break
+// 		}
+// 	}
 
-		if numFound > 5 {
-			break
-		}
-	}
+// 	if scanner.Err() != nil {
+// 		die(scanner.Err())
+// 	}
+// }
 
-	if scanner.Err() != nil {
-		die(scanner.Err())
-	}
-}
+// func displayResults(results bomToDirToStats) {
+// 	// while (my ($bom, $dirs) = each %d) {
+// 	//   open(my $fh, ">$bom.tsv");
+// 	//   foreach my $dir (sort { $a =~ tr/\/// <=> $b =~ tr/\/// || $a cmp $b } keys %{$dirs}) {
+// 	//     my $stats = $dirs->{$dir};
+// 	//     my $gb = sprintf("%.2f", $stats->[1]);
+// 	//     print $fh "$dir\t$stats->[0]\t$gb\n"
+// 	//    }
 
-func displayResults(results bomToDirToStats) {
-	// while (my ($bom, $dirs) = each %d) {
-	//   open(my $fh, ">$bom.tsv");
-	//   foreach my $dir (sort { $a =~ tr/\/// <=> $b =~ tr/\/// || $a cmp $b } keys %{$dirs}) {
-	//     my $stats = $dirs->{$dir};
-	//     my $gb = sprintf("%.2f", $stats->[1]);
-	//     print $fh "$dir\t$stats->[0]\t$gb\n"
-	//    }
-
-	for bom, dirStats := range results {
-		for dir, stats := range dirStats {
-			gb := fmt.Sprintf("%.2f", stats.size)
-			fmt.Printf("%s\t%s\t%d\t%s\n", bom, dir, stats.count, gb)
-		}
-	}
-}
+// 	for bom, dirStats := range results {
+// 		for dir, stats := range dirStats {
+// 			gb := fmt.Sprintf("%.2f", stats.size)
+// 			fmt.Printf("%s\t%s\t%d\t%s\n", bom, dir, stats.count, gb)
+// 		}
+// 	}
+// }
