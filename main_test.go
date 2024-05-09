@@ -54,8 +54,6 @@ func TestSomething(t *testing.T) {
 		Convey("And an age in years, you can get extract stats for files older than the specified age", func() {
 			var i int
 			for p.ScanForOldFiles(7) {
-				i++
-
 				info := p.FileInfo()
 				So(info, ShouldNotBeNil)
 
@@ -66,8 +64,12 @@ func TestSomething(t *testing.T) {
 					So(info.MTime, ShouldEqual, 1437483022)
 					So(info.CTime, ShouldEqual, 1703699980)
 				} else if i == 1 {
+					So(info.Path, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/test/view.filter.10.out") //nolint:lll
 					So(info.Size, ShouldEqual, 3754)
+					So(info.MTime, ShouldEqual, 1402590965)
 				}
+
+				i++
 			}
 			So(i, ShouldEqual, 6)
 		})

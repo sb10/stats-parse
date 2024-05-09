@@ -164,10 +164,10 @@ type stats struct {
 
 type Info struct {
 	Path  string
-	Size  uint64
-	GID   uint64
-	MTime uint64
-	CTime uint64
+	Size  int64
+	GID   int
+	MTime int
+	CTime int
 }
 
 type bomToDirToStats map[string]map[string]stats
@@ -188,6 +188,7 @@ type Parser struct {
 	scanner    *bufio.Scanner
 	pathBuffer []byte
 	epochNow   int64
+	info       Info
 }
 
 func New(path string) (*Parser, error) {
@@ -238,7 +239,7 @@ func (p *Parser) filterForOldFiles(years int) bool {
 		i++
 	}
 
-	// encodedPath := b[0:i]
+	encodedPath := b[0:i]
 
 	var size int64
 
@@ -284,12 +285,25 @@ func (p *Parser) filterForOldFiles(years int) bool {
 		return p.ScanForOldFiles(years)
 	}
 
-	return true
+	l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
+	if err != nil {
+		fmt.Printf("\ndecode error: %s\n", err)
+		//TODO: do something with this error
+	}
 
-	// l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
-	// if err != nil {
-	// 	//TODO: do something with this error
-	// }
+	info := Info{}
+	info.Path = string(p.pathBuffer[:l])
+	info.CTime = ctime
+	info.MTime = mtime
+	info.Size = size
+	info.GID = gid
+	p.info = info
+
+	return true
+}
+
+func (p *Parser) FileInfo() *Info {
+	return &p.info
 }
 
 func parseStatsFile(path string, gidToBom map[int]string, age int64, results bomToDirToStats) {
@@ -412,10 +426,6 @@ func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDi
 	if scanner.Err() != nil {
 		die(scanner.Err())
 	}
-}
-
-func (p *Parser) FileInfo() *Info {
-	return nil
 }
 
 func displayResults(results bomToDirToStats) {
