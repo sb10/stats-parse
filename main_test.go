@@ -26,7 +26,6 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -155,7 +154,7 @@ func BenchmarkScanAndFileInfo(b *testing.B) {
 		}
 
 		if p.scanner.Err() != nil {
-			fmt.Printf("\nerr: %s\n", p.scanner.Err())
+			b.Logf("\nerr: %s\n", p.scanner.Err())
 
 			break
 		}

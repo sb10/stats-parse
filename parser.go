@@ -47,9 +47,9 @@ type Parser struct {
 	epochTimeDesired int64
 	Path             []byte
 	Size             int64
-	GID              int
-	MTime            int
-	CTime            int
+	GID              int64
+	MTime            int64
+	CTime            int64
 }
 
 func New(r io.Reader) *Parser {
@@ -75,44 +75,32 @@ func (p *Parser) getInfo() bool {
 	b := p.scanner.Bytes()
 
 	i := 0
-	for b[i] != '\t' {
-		i++
+
+	skipColumn := func() {
+		for b[i] != '\t' {
+			i++
+		}
 	}
+
+	parseNumberColumn := func(v *int64) {
+		*v = 0
+		for i++; b[i] != '\t'; i++ {
+			*v = *v*10 + int64(b[i]) - '0'
+		}
+	}
+
+	skipColumn()
 
 	encodedPath := b[0:i]
 
-	p.Size = 0
+	for _, val := range []*int64{&p.Size, nil, &p.GID, nil, &p.MTime, &p.CTime} {
+		if val != nil {
+			parseNumberColumn(val)
+		} else {
+			i++
 
-	for i++; b[i] != '\t'; i++ {
-		p.Size = p.Size*10 + int64(b[i]) - '0'
-	}
-
-	i++
-	for b[i] != '\t' {
-		i++
-	}
-
-	p.GID = 0
-
-	for i++; b[i] != '\t'; i++ {
-		p.GID = p.GID*10 + int(b[i]) - '0'
-	}
-
-	i++
-	for b[i] != '\t' {
-		i++
-	}
-
-	p.MTime = 0
-
-	for i++; b[i] != '\t'; i++ {
-		p.MTime = p.MTime*10 + int(b[i]) - '0'
-	}
-
-	p.CTime = 0
-
-	for i++; b[i] != '\t'; i++ {
-		p.CTime = p.CTime*10 + int(b[i]) - '0'
+			skipColumn()
+		}
 	}
 
 	i++
@@ -145,7 +133,7 @@ func (p *Parser) filterForOldFiles(b []byte, i int) bool {
 		return false
 	}
 
-	if int64(min(p.MTime, p.CTime)) > p.epochTimeDesired {
+	if min(p.MTime, p.CTime) > p.epochTimeDesired {
 		return false
 	}
 
