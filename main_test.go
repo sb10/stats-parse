@@ -29,6 +29,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +68,8 @@ func TestParser(t *testing.T) {
 				i++
 			}
 			So(i, ShouldEqual, 18890)
+
+			So(p.Err(), ShouldBeNil)
 		})
 
 		Convey("you can get extract info for files older than the specified age", func() {
@@ -89,6 +92,8 @@ func TestParser(t *testing.T) {
 				i++
 			}
 			So(i, ShouldEqual, 6)
+
+			So(p.Err(), ShouldBeNil)
 		})
 
 		Convey("the age filter gives different results with different ages", func() {
@@ -99,6 +104,18 @@ func TestParser(t *testing.T) {
 				i++
 			}
 			So(i, ShouldEqual, 9)
+
+			So(p.Err(), ShouldBeNil)
+		})
+	})
+
+	Convey("Given an invalid file", t, func() {
+		p := New(strings.NewReader("this is invalid since it has spaces"))
+		So(p, ShouldNotBeNil)
+
+		Convey("it provides an error", func() {
+			So(p.Scan(), ShouldBeFalse)
+			So(p.Err(), ShouldEqual, ErrBadPath)
 		})
 	})
 }

@@ -26,10 +26,13 @@ package main
 import (
 	"bufio"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"time"
 )
+
+type Error string
+
+func (e Error) Error() string { return string(e) }
 
 const (
 	fileType                   = byte('f')
@@ -37,6 +40,8 @@ const (
 	secsPerYear                = 3600 * 24 * 365
 	maxLineLength              = 64 * 1024
 	maxBase64EncodedPathLength = 1024
+
+	ErrBadPath = Error("invalid file format: path is not base64 encoded")
 )
 
 type Parser struct {
@@ -50,6 +55,7 @@ type Parser struct {
 	GID              int64
 	MTime            int64
 	CTime            int64
+	error            error
 }
 
 func New(r io.Reader) *Parser {
@@ -73,18 +79,27 @@ func (p *Parser) Scan() bool {
 
 func (p *Parser) getInfo() bool {
 	b := p.scanner.Bytes()
+	lineLength := len(b)
 
 	i := 0
 
 	skipColumn := func() {
+		if i >= lineLength {
+			return
+		}
+
 		for b[i] != '\t' {
 			i++
+
+			if i >= lineLength {
+				break
+			}
 		}
 	}
 
 	parseNumberColumn := func(v *int64) {
 		*v = 0
-		for i++; b[i] != '\t'; i++ {
+		for i++; i < lineLength && b[i] != '\t'; i++ {
 			*v = *v*10 + int64(b[i]) - '0'
 		}
 	}
@@ -113,8 +128,9 @@ func (p *Parser) getInfo() bool {
 
 	l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
 	if err != nil {
-		fmt.Printf("\ndecode error: %s\n", err)
-		//TODO: do something with this error
+		p.error = ErrBadPath
+
+		return false
 	}
 
 	p.Path = p.pathBuffer[:l]
@@ -138,4 +154,9 @@ func (p *Parser) filterForOldFiles(b []byte, i int) bool {
 	}
 
 	return true
+}
+
+// Err returns the first non-EOF error that was encountered by the Scanner.
+func (p *Parser) Err() error {
+	return p.error
 }
