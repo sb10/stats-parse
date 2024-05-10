@@ -38,8 +38,6 @@ import (
 
 const epochWhenTestFileWasCreated = 1715261665
 
-const firstLineOfTestFile = `L2x1c3RyZS9zY3JhdGNoMTIyL3RvbC90ZWFtcy9ibGF4dGVyL3VzZXJzL2FtNzUvYXNzZW1ibGllcy9kYXRhc2V0L2lsWGVzU2V4czEuMl9nZW5vbWljLmZuYQ==	646315412	21967	15078	1699895920	1698792671	1698917473	f	144116446803265182	1	2983906128` //nolint:lll
-
 func TestParser(t *testing.T) {
 	Convey("Given a parser and reader", t, func() {
 		f, err := os.Open("test.stats.gz")
@@ -57,9 +55,26 @@ func TestParser(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(p, ShouldNotBeNil)
 
-		Convey("you can get extract info for files older than the specified age", func() {
+		Convey("you can get extract info for all entries", func() {
 			i := 0
-			for p.ScanForOldFiles(yearsRelativeToTestFileCreation(7)) {
+			for p.Scan() {
+				if i == 0 {
+					So(string(p.Path), ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/am75/assemblies/dataset/ilXesSexs1.2_genomic.fna") //nolint:lll
+
+				} else if i == 1 {
+					So(string(p.Path), ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/am75/assemblies/dataset/ilOpeBrum1.1_genomic.fna.fai") //nolint:lll
+				}
+
+				i++
+			}
+			So(i, ShouldEqual, 18890)
+		})
+
+		Convey("you can get extract info for files older than the specified age", func() {
+			p.FilterForFilesOlderThan(yearsRelativeToTestFileCreation(7))
+
+			i := 0
+			for p.Scan() {
 				if i == 0 {
 					So(string(p.Path), ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9/hfile_net.c") //nolint:lll
 					So(p.Size, ShouldEqual, 3192)
@@ -78,8 +93,10 @@ func TestParser(t *testing.T) {
 		})
 
 		Convey("the age filter gives different results with different ages", func() {
+			p.FilterForFilesOlderThan(yearsRelativeToTestFileCreation(6))
+
 			i := 0
-			for p.ScanForOldFiles(yearsRelativeToTestFileCreation(6)) {
+			for p.Scan() {
 				i++
 			}
 			So(i, ShouldEqual, 9)
@@ -98,18 +115,9 @@ func BenchmarkScanAndFileInfo(b *testing.B) {
 	tempDir := b.TempDir()
 	testStatsFile := filepath.Join(tempDir, "test.stats")
 
-	f, err := os.Open("test.stats.gz")
-	if err != nil {
-		b.Fatal(err)
-	}
+	f, gr := openTestFile(b)
 
 	defer f.Close()
-
-	gr, err := gzip.NewReader(f)
-	if err != nil {
-		b.Fatal(err)
-	}
-
 	defer gr.Close()
 
 	outFile, err := os.Create(testStatsFile)
@@ -138,7 +146,9 @@ func BenchmarkScanAndFileInfo(b *testing.B) {
 
 		p := New(f)
 
-		for p.ScanForOldFiles(7) {
+		p.FilterForFilesOlderThan(yearsRelativeToTestFileCreation(7))
+
+		for p.Scan() {
 			if p.Size == 0 {
 				continue
 			}
@@ -154,35 +164,52 @@ func BenchmarkScanAndFileInfo(b *testing.B) {
 	}
 }
 
+func openTestFile(b *testing.B) (io.ReadCloser, io.ReadCloser) {
+	f, err := os.Open("test.stats.gz")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	return f, gr
+}
+
 func BenchmarkRawScanner(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		f, err := os.Open("test.stats.gz")
-		if err != nil {
-			continue
-		}
+		b.StopTimer()
 
-		gr, err := gzip.NewReader(f)
-		if err != nil {
-			continue
-		}
+		f, gr := openTestFile(b)
+
+		b.StartTimer()
 
 		scanner := bufio.NewScanner(gr)
 
 		for scanner.Scan() {
 		}
+
+		gr.Close()
+		f.Close()
 	}
 }
 
 func BenchmarkRawScannerUncompressed(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		f, err := os.Open("test.stats")
-		if err != nil {
-			continue
-		}
+		b.StopTimer()
+
+		f, gr := openTestFile(b)
+
+		b.StartTimer()
 
 		scanner := bufio.NewScanner(f)
 
 		for scanner.Scan() {
 		}
+
+		gr.Close()
+		f.Close()
 	}
 }

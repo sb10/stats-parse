@@ -25,15 +25,12 @@ package main
 
 import (
 	"bufio"
-	"encoding/base64"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const helpText = `stats-parse parses wrstat stats.gz files quickly, in low mem.
@@ -59,14 +56,6 @@ Options:
   -a <int>    age of files to report on (years, per oldest of c&mtime)
   -b <string> path to bom.gids file
 `
-
-const (
-	fileType                   = byte('f')
-	defaultAge                 = 7
-	secsPerYear                = 3600 * 24 * 365
-	maxLineLength              = 64 * 1024
-	maxBase64EncodedPathLength = 1024
-)
 
 var l = log.New(os.Stderr, "", 0)
 
@@ -162,14 +151,6 @@ type stats struct {
 	size  float64
 }
 
-type Info struct {
-	Path  string
-	Size  int64
-	GID   int
-	MTime int
-	CTime int
-}
-
 type bomToDirToStats map[string]map[string]stats
 
 // func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
@@ -181,107 +162,6 @@ type bomToDirToStats map[string]map[string]stats
 // 		break
 // 	}
 // }
-
-type Parser struct {
-	scanner    *bufio.Scanner
-	pathBuffer []byte
-	now        time.Time
-	Path       []byte
-	Size       int64
-	GID        int
-	MTime      int
-	CTime      int
-}
-
-//go:noinline
-func New(r io.Reader) *Parser {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, maxLineLength), maxLineLength)
-
-	return &Parser{
-		scanner:    scanner,
-		pathBuffer: make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength)),
-		now:        time.Now(),
-	}
-}
-
-//go:noinline
-func (p *Parser) ScanForOldFiles(d time.Duration) bool {
-	keepGoing := p.scanner.Scan()
-	if !keepGoing {
-		return false
-	}
-
-	return p.filterForOldFiles(d)
-}
-
-//go:noinline
-func (p *Parser) filterForOldFiles(d time.Duration) bool {
-	epochTimeDesired := p.now.Add(-d).Unix()
-
-	b := p.scanner.Bytes()
-
-	i := 0
-	for b[i] != '\t' {
-		i++
-	}
-
-	encodedPath := b[0:i]
-
-	p.Size = 0
-
-	for i++; b[i] != '\t'; i++ {
-		p.Size = p.Size*10 + int64(b[i]) - '0'
-	}
-
-	i++
-	for b[i] != '\t' {
-		i++
-	}
-
-	p.GID = 0
-
-	for i++; b[i] != '\t'; i++ {
-		p.GID = p.GID*10 + int(b[i]) - '0'
-	}
-
-	i++
-	for b[i] != '\t' {
-		i++
-	}
-
-	p.MTime = 0
-
-	for i++; b[i] != '\t'; i++ {
-		p.MTime = p.MTime*10 + int(b[i]) - '0'
-	}
-
-	p.CTime = 0
-
-	for i++; b[i] != '\t'; i++ {
-		p.CTime = p.CTime*10 + int(b[i]) - '0'
-	}
-
-	i++
-
-	if b[i] != fileType {
-		return p.ScanForOldFiles(d)
-	}
-
-	if int64(min(p.MTime, p.CTime)) > epochTimeDesired {
-		return p.ScanForOldFiles(d)
-	}
-
-	l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
-	if err != nil {
-		fmt.Printf("\ndecode error: %s\n", err)
-		//TODO: do something with this error
-	}
-
-	p.Path = p.pathBuffer[:l]
-
-	return true
-}
 
 // func parseStatsFile(path string, gidToBom map[int]string, age int64, results bomToDirToStats) {
 // 	f, err := os.Open(path)
