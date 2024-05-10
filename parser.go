@@ -41,7 +41,8 @@ const (
 	maxLineLength              = 64 * 1024
 	maxBase64EncodedPathLength = 1024
 
-	ErrBadPath = Error("invalid file format: path is not base64 encoded")
+	ErrBadPath       = Error("invalid file format: path is not base64 encoded")
+	ErrTooFewColumns = Error("invalid file format: too few tab separated columns")
 )
 
 type Parser struct {
@@ -81,40 +82,70 @@ func (p *Parser) getInfo() bool {
 	b := p.scanner.Bytes()
 	lineLength := len(b)
 
+	if lineLength <= 1 {
+		return true
+	}
+
 	i := 0
 
-	skipColumn := func() {
+	skipColumn := func() bool {
 		if i >= lineLength {
-			return
+			return false
 		}
 
 		for b[i] != '\t' {
 			i++
 
 			if i >= lineLength {
-				break
+				p.error = ErrTooFewColumns
+
+				return false
 			}
 		}
+
+		return true
 	}
 
-	parseNumberColumn := func(v *int64) {
+	parseNumberColumn := func(v *int64) bool {
 		*v = 0
-		for i++; i < lineLength && b[i] != '\t'; i++ {
-			*v = *v*10 + int64(b[i]) - '0'
+		i++
+
+		if i >= lineLength {
+			p.error = ErrTooFewColumns
+
+			return false
 		}
+
+		for b[i] != '\t' {
+			*v = *v*10 + int64(b[i]) - '0'
+
+			i++
+			if i >= lineLength {
+				p.error = ErrTooFewColumns
+				return false
+			}
+		}
+
+		return true
 	}
 
-	skipColumn()
+	if !skipColumn() {
+		return false
+	}
 
 	encodedPath := b[0:i]
 
 	for _, val := range []*int64{&p.Size, nil, &p.GID, nil, &p.MTime, &p.CTime} {
 		if val != nil {
-			parseNumberColumn(val)
+			if !parseNumberColumn(val) {
+				return false
+			}
 		} else {
 			i++
 
-			skipColumn()
+			if !skipColumn() {
+				return false
+			}
 		}
 	}
 

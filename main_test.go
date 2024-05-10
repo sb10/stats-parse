@@ -109,13 +109,53 @@ func TestParser(t *testing.T) {
 		})
 	})
 
-	Convey("Given an invalid file", t, func() {
-		p := New(strings.NewReader("this is invalid since it has spaces"))
-		So(p, ShouldNotBeNil)
-
-		Convey("it provides an error", func() {
+	Convey("Scan generates Err() when", t, func() {
+		Convey("first column is not base64 encoded", func() {
+			p := New(strings.NewReader("this is invalid since it has spaces\t1\t1\t1\t1\t1\t1\tf\t1\t1\td\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrBadPath)
+		})
+
+		Convey("there are not enough tab separated columns", func() {
+			encodedPath := "L2x1c3RyZS9zY3JhdGNoMTIyL3RvbC90ZWFtcy9ibGF4dGVyL3VzZXJzL2FtNzUvYXNzZW1ibGllcy9kYXRhc2V0L2lsWGVzU2V4czEuMl9nZW5vbWljLmZuYQ==" //nolint:lll
+
+			p := New(strings.NewReader(encodedPath + "\t1\t1\t1\t1\t1\t1\tf\t1\t1\td\n"))
+			So(p.Scan(), ShouldBeTrue)
+			So(p.Err(), ShouldBeNil)
+
+			p = New(strings.NewReader(encodedPath + "\t1\t1\t1\t1\t1\n"))
+			So(p.Scan(), ShouldBeFalse)
+			So(p.Err(), ShouldEqual, ErrTooFewColumns)
+
+			p = New(strings.NewReader(encodedPath + "\t1\t1\t1\t1\n"))
+			So(p.Scan(), ShouldBeFalse)
+			So(p.Err(), ShouldEqual, ErrTooFewColumns)
+
+			p = New(strings.NewReader(encodedPath + "\t1\t1\t1\n"))
+			So(p.Scan(), ShouldBeFalse)
+			So(p.Err(), ShouldEqual, ErrTooFewColumns)
+
+			p = New(strings.NewReader(encodedPath + "\t1\t1\n"))
+			So(p.Scan(), ShouldBeFalse)
+			So(p.Err(), ShouldEqual, ErrTooFewColumns)
+
+			p = New(strings.NewReader(encodedPath + "\t1\n"))
+			So(p.Scan(), ShouldBeFalse)
+			So(p.Err(), ShouldEqual, ErrTooFewColumns)
+
+			p = New(strings.NewReader(encodedPath + "\n"))
+			So(p.Scan(), ShouldBeFalse)
+			So(p.Err(), ShouldEqual, ErrTooFewColumns)
+
+			Convey("but not for blank lines", func() {
+				p = New(strings.NewReader("\n"))
+				So(p.Scan(), ShouldBeTrue)
+				So(p.Err(), ShouldBeNil)
+
+				p := New(strings.NewReader(""))
+				So(p.Scan(), ShouldBeFalse)
+				So(p.Err(), ShouldBeNil)
+			})
 		})
 	})
 }
