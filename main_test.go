@@ -60,7 +60,11 @@ func TestParser(t *testing.T) {
 			for p.Scan() {
 				if i == 0 {
 					So(string(p.Path), ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/am75/assemblies/dataset/ilXesSexs1.2_genomic.fna") //nolint:lll
-
+					So(p.Size, ShouldEqual, 646315412)
+					So(p.GID, ShouldEqual, 15078)
+					So(p.MTime, ShouldEqual, 1698792671)
+					So(p.CTime, ShouldEqual, 1698917473)
+					So(p.EntryType, ShouldEqual, fileType)
 				} else if i == 1 {
 					So(string(p.Path), ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/am75/assemblies/dataset/ilOpeBrum1.1_genomic.fna.fai") //nolint:lll
 				}

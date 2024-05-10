@@ -48,14 +48,17 @@ const (
 type Parser struct {
 	scanner          *bufio.Scanner
 	pathBuffer       []byte
-	filter           func([]byte, int) bool
-	now              time.Time
+	filter           func() bool
 	epochTimeDesired int64
+	lineBytes        []byte
+	lineLength       int
+	lineIndex        int
 	Path             []byte
 	Size             int64
 	GID              int64
 	MTime            int64
 	CTime            int64
+	EntryType        byte
 	error            error
 }
 
@@ -66,7 +69,12 @@ func New(r io.Reader) *Parser {
 	return &Parser{
 		scanner:    scanner,
 		pathBuffer: make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength)),
+		filter:     noFilter,
 	}
+}
+
+func noFilter() bool {
+	return true
 }
 
 func (p *Parser) Scan() bool {
@@ -75,88 +83,91 @@ func (p *Parser) Scan() bool {
 		return false
 	}
 
-	return p.getInfo()
+	return p.parseLine()
 }
 
-func (p *Parser) getInfo() bool {
-	b := p.scanner.Bytes()
-	lineLength := len(b)
+func (p *Parser) parseLine() bool {
+	p.lineBytes = p.scanner.Bytes()
+	p.lineLength = len(p.lineBytes)
 
-	if lineLength <= 1 {
+	if p.lineLength <= 1 {
 		return true
 	}
 
-	i := 0
+	p.lineIndex = 0
 
-	skipColumn := func() bool {
-		if i >= lineLength {
-			return false
-		}
-
-		for b[i] != '\t' {
-			i++
-
-			if i >= lineLength {
-				p.error = ErrTooFewColumns
-
-				return false
-			}
-		}
-
-		return true
-	}
-
-	parseNumberColumn := func(v *int64) bool {
-		*v = 0
-		i++
-
-		if i >= lineLength {
-			p.error = ErrTooFewColumns
-
-			return false
-		}
-
-		for b[i] != '\t' {
-			*v = *v*10 + int64(b[i]) - '0'
-
-			i++
-			if i >= lineLength {
-				p.error = ErrTooFewColumns
-				return false
-			}
-		}
-
-		return true
-	}
-
-	if !skipColumn() {
+	encodedPath, ok := p.parseNextColumn()
+	if !ok {
 		return false
 	}
 
-	encodedPath := b[0:i]
+	if !p.parseColumns2to7() {
+		return false
+	}
 
+	entryTypeCol, ok := p.parseNextColumn()
+	if !ok {
+		return false
+	}
+
+	p.EntryType = entryTypeCol[0]
+
+	if filterResult := p.filter(); !filterResult {
+		return p.Scan()
+	}
+
+	return p.decodePath(encodedPath)
+}
+
+func (p *Parser) parseColumns2to7() bool {
 	for _, val := range []*int64{&p.Size, nil, &p.GID, nil, &p.MTime, &p.CTime} {
-		if val != nil {
-			if !parseNumberColumn(val) {
-				return false
-			}
-		} else {
-			i++
-
-			if !skipColumn() {
-				return false
-			}
+		if !p.parseNumberColumn(val) {
+			return false
 		}
 	}
 
-	i++
+	return true
+}
 
-	if p.filter != nil {
-		if filterResult := p.filter(b, i); !filterResult {
-			return p.Scan()
+func (p *Parser) parseNextColumn() ([]byte, bool) {
+	start := p.lineIndex
+
+	for p.lineBytes[p.lineIndex] != '\t' {
+		p.lineIndex++
+
+		if p.lineIndex >= p.lineLength {
+			p.error = ErrTooFewColumns
+
+			return nil, false
 		}
 	}
 
+	end := p.lineIndex
+	p.lineIndex++
+
+	return p.lineBytes[start:end], true
+}
+
+func (p *Parser) parseNumberColumn(v *int64) bool {
+	col, ok := p.parseNextColumn()
+	if !ok {
+		return false
+	}
+
+	if v == nil {
+		return true
+	}
+
+	*v = 0
+
+	for _, c := range col {
+		*v = *v*10 + int64(c) - '0'
+	}
+
+	return true
+}
+
+func (p *Parser) decodePath(encodedPath []byte) bool {
 	l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
 	if err != nil {
 		p.error = ErrBadPath
@@ -171,12 +182,11 @@ func (p *Parser) getInfo() bool {
 
 func (p *Parser) FilterForFilesOlderThan(d time.Duration) {
 	p.filter = p.filterForOldFiles
-	p.now = time.Now()
-	p.epochTimeDesired = p.now.Add(-d).Unix()
+	p.epochTimeDesired = time.Now().Add(-d).Unix()
 }
 
-func (p *Parser) filterForOldFiles(b []byte, i int) bool {
-	if b[i] != fileType {
+func (p *Parser) filterForOldFiles() bool {
+	if p.EntryType != fileType {
 		return false
 	}
 
