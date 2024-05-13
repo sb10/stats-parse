@@ -40,13 +40,24 @@ type Stats struct {
 	Size      int64 // in bytes
 }
 
+type bomDirectoryStats map[string]map[string]*Stats
+
 // BoMDirectoryStats uses the given StatsParser and GIDToBoM to find the number
 // and size of all files belonging to each BoM area that are older than the
 // given duration, and returns a slice of ?.
 func BoMDirectoryStats(sp *StatsParser, gp *GIDToBoM, d time.Duration) ([]*Stats, error) {
-	bomToDirToStats := make(map[string]map[string]*Stats)
-
 	sp.FilterForFilesOlderThan(d)
+
+	bomToDirToStats, err := getBoMDirectoryStats(sp, gp)
+	if err != nil {
+		return nil, err
+	}
+
+	return sortBoMDirectoryStats(bomToDirToStats), nil
+}
+
+func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (bomDirectoryStats, error) {
+	bomToDirToStats := make(bomDirectoryStats)
 
 	for sp.Scan() {
 		bom, err := gp.GetBom(int(sp.GID))
@@ -63,24 +74,16 @@ func BoMDirectoryStats(sp *StatsParser, gp *GIDToBoM, d time.Duration) ([]*Stats
 		leafDir := filepath.Dir(string(sp.Path))
 		dirs := strings.Split(leafDir, dirSeparator)
 
-		for i := range dirs {
-			thisDir := strings.Join(dirs[0:i], dirSeparator)
-			thisDir = strings.TrimSuffix(thisDir, dirSeparator)
-
-			stats, ok := dirStats[thisDir]
-			if !ok {
-				stats = &Stats{}
-				dirStats[thisDir] = stats
-			}
-
-			stats.Count++
-			stats.Size += sp.Size
-		}
+		accumulateDirStats(dirs, sp, dirStats)
 	}
 
+	return bomToDirToStats, nil
+}
+
+func sortBoMDirectoryStats(bds bomDirectoryStats) []*Stats {
 	var results []*Stats
 
-	for bom, dirStats := range bomToDirToStats {
+	for bom, dirStats := range bds {
 		for dir, stats := range dirStats {
 			stats.BoM = bom
 			stats.Directory = dir
@@ -96,5 +99,21 @@ func BoMDirectoryStats(sp *StatsParser, gp *GIDToBoM, d time.Duration) ([]*Stats
 		return cmp.Compare(strings.Count(a.Directory, "/"), strings.Count(b.Directory, "/"))
 	})
 
-	return results, nil
+	return results
+}
+
+func accumulateDirStats(dirs []string, sp *StatsParser, dirStats map[string]*Stats) {
+	for i := range dirs {
+		thisDir := strings.Join(dirs[0:i], dirSeparator)
+		thisDir = strings.TrimSuffix(thisDir, dirSeparator)
+
+		stats, ok := dirStats[thisDir]
+		if !ok {
+			stats = &Stats{}
+			dirStats[thisDir] = stats
+		}
+
+		stats.Count++
+		stats.Size += sp.Size
+	}
 }
