@@ -38,7 +38,7 @@ import (
 
 const epochWhenTestFileWasCreated = 1715261665
 
-func TestParser(t *testing.T) {
+func TestParseStats(t *testing.T) {
 	Convey("Given a parser and reader", t, func() {
 		f, err := os.Open("test.stats.gz")
 		So(err, ShouldBeNil)
@@ -50,7 +50,7 @@ func TestParser(t *testing.T) {
 
 		defer gr.Close()
 
-		p := New(gr)
+		p := NewStatsParser(gr)
 
 		So(err, ShouldBeNil)
 		So(p, ShouldNotBeNil)
@@ -115,7 +115,7 @@ func TestParser(t *testing.T) {
 
 	Convey("Scan generates Err() when", t, func() {
 		Convey("first column is not base64 encoded", func() {
-			p := New(strings.NewReader("this is invalid since it has spaces\t1\t1\t1\t1\t1\t1\tf\t1\t1\td\n"))
+			p := NewStatsParser(strings.NewReader("this is invalid since it has spaces\t1\t1\t1\t1\t1\t1\tf\t1\t1\td\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrBadPath)
 		})
@@ -123,44 +123,83 @@ func TestParser(t *testing.T) {
 		Convey("there are not enough tab separated columns", func() {
 			encodedPath := "L2x1c3RyZS9zY3JhdGNoMTIyL3RvbC90ZWFtcy9ibGF4dGVyL3VzZXJzL2FtNzUvYXNzZW1ibGllcy9kYXRhc2V0L2lsWGVzU2V4czEuMl9nZW5vbWljLmZuYQ==" //nolint:lll
 
-			p := New(strings.NewReader(encodedPath + "\t1\t1\t1\t1\t1\t1\tf\t1\t1\td\n"))
+			p := NewStatsParser(strings.NewReader(encodedPath + "\t1\t1\t1\t1\t1\t1\tf\t1\t1\td\n"))
 			So(p.Scan(), ShouldBeTrue)
 			So(p.Err(), ShouldBeNil)
 
-			p = New(strings.NewReader(encodedPath + "\t1\t1\t1\t1\t1\n"))
+			p = NewStatsParser(strings.NewReader(encodedPath + "\t1\t1\t1\t1\t1\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrTooFewColumns)
 
-			p = New(strings.NewReader(encodedPath + "\t1\t1\t1\t1\n"))
+			p = NewStatsParser(strings.NewReader(encodedPath + "\t1\t1\t1\t1\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrTooFewColumns)
 
-			p = New(strings.NewReader(encodedPath + "\t1\t1\t1\n"))
+			p = NewStatsParser(strings.NewReader(encodedPath + "\t1\t1\t1\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrTooFewColumns)
 
-			p = New(strings.NewReader(encodedPath + "\t1\t1\n"))
+			p = NewStatsParser(strings.NewReader(encodedPath + "\t1\t1\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrTooFewColumns)
 
-			p = New(strings.NewReader(encodedPath + "\t1\n"))
+			p = NewStatsParser(strings.NewReader(encodedPath + "\t1\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrTooFewColumns)
 
-			p = New(strings.NewReader(encodedPath + "\n"))
+			p = NewStatsParser(strings.NewReader(encodedPath + "\n"))
 			So(p.Scan(), ShouldBeFalse)
 			So(p.Err(), ShouldEqual, ErrTooFewColumns)
 
 			Convey("but not for blank lines", func() {
-				p = New(strings.NewReader("\n"))
+				p = NewStatsParser(strings.NewReader("\n"))
 				So(p.Scan(), ShouldBeTrue)
 				So(p.Err(), ShouldBeNil)
 
-				p := New(strings.NewReader(""))
+				p := NewStatsParser(strings.NewReader(""))
 				So(p.Scan(), ShouldBeFalse)
 				So(p.Err(), ShouldBeNil)
 			})
 		})
+	})
+}
+
+func TestParseBomGIDs(t *testing.T) {
+	Convey("Given a bomgids file and a bomgids parser", t, func() {
+		f, err := os.Open("bom.gids")
+		So(err, ShouldBeNil)
+		defer f.Close()
+
+		p, err := NewBomGIDsParser(f)
+		So(p, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		Convey("you can get the bom of a GID", func() {
+			bom, err := p.GetBom(15660)
+			So(err, ShouldBeNil)
+			So(bom, ShouldEqual, "HumanGenetics")
+		})
+
+		Convey("an error is returned if the GID is invalid", func() {
+			bom, err := p.GetBom(123456789)
+			So(err, ShouldEqual, ErrInvalidGID)
+			So(bom, ShouldEqual, "")
+		})
+	})
+
+	Convey("Given invalid bomgids data, it fails to parse", t, func() {
+		_, err := NewBomGIDsParser(strings.NewReader("bom\tgid\n"))
+		So(err, ShouldNotBeNil)
+
+		_, err = NewBomGIDsParser(strings.NewReader("bom\t123\t456\n"))
+		So(err, ShouldNotBeNil)
+
+		_, err = NewBomGIDsParser(strings.NewReader("\n"))
+		So(err, ShouldNotBeNil)
+
+		p, err := NewBomGIDsParser(strings.NewReader(""))
+		So(err, ShouldBeNil)
+		So(len(p.gidToBom), ShouldEqual, 0)
 	})
 }
 
@@ -204,7 +243,7 @@ func BenchmarkScanAndFileInfo(b *testing.B) {
 
 		b.StartTimer()
 
-		p := New(f)
+		p := NewStatsParser(f)
 
 		p.FilterForFilesOlderThan(yearsRelativeToTestFileCreation(7))
 
@@ -225,6 +264,8 @@ func BenchmarkScanAndFileInfo(b *testing.B) {
 }
 
 func openTestFile(b *testing.B) (io.ReadCloser, io.ReadCloser) {
+	b.Helper()
+
 	f, err := os.Open("test.stats.gz")
 	if err != nil {
 		b.Fatal(err)

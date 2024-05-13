@@ -47,8 +47,8 @@ const (
 	ErrTooFewColumns = Error("invalid file format: too few tab separated columns")
 )
 
-// Parser is used to parse wrstat stats files.
-type Parser struct {
+// StatsParser is used to parse wrstat stats files.
+type StatsParser struct {
 	scanner          *bufio.Scanner
 	pathBuffer       []byte
 	filter           func() bool
@@ -65,12 +65,13 @@ type Parser struct {
 	error            error
 }
 
-// New is used to create a new Parser, given uncompressed wrstat stats data.
-func New(r io.Reader) *Parser {
+// NewStatsParser is used to create a new StatsParser, given uncompressed wrstat
+// stats data.
+func NewStatsParser(r io.Reader) *StatsParser {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, maxLineLength), maxLineLength)
 
-	return &Parser{
+	return &StatsParser{
 		scanner:    scanner,
 		pathBuffer: make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength)),
 		filter:     noFilter,
@@ -88,7 +89,7 @@ func noFilter() bool {
 // or an error. After Scan returns false, the Err method will return any error
 // that occurred during scanning, except that if it was io.EOF, Err will return
 // nil.
-func (p *Parser) Scan() bool {
+func (p *StatsParser) Scan() bool {
 	keepGoing := p.scanner.Scan()
 	if !keepGoing {
 		return false
@@ -97,7 +98,7 @@ func (p *Parser) Scan() bool {
 	return p.parseLine()
 }
 
-func (p *Parser) parseLine() bool {
+func (p *StatsParser) parseLine() bool {
 	p.lineBytes = p.scanner.Bytes()
 	p.lineLength = len(p.lineBytes)
 
@@ -130,7 +131,7 @@ func (p *Parser) parseLine() bool {
 	return p.decodePath(encodedPath)
 }
 
-func (p *Parser) parseColumns2to7() bool {
+func (p *StatsParser) parseColumns2to7() bool {
 	for _, val := range []*int64{&p.Size, nil, &p.GID, nil, &p.MTime, &p.CTime} {
 		if !p.parseNumberColumn(val) {
 			return false
@@ -140,7 +141,7 @@ func (p *Parser) parseColumns2to7() bool {
 	return true
 }
 
-func (p *Parser) parseNextColumn() ([]byte, bool) {
+func (p *StatsParser) parseNextColumn() ([]byte, bool) {
 	start := p.lineIndex
 
 	for p.lineBytes[p.lineIndex] != '\t' {
@@ -159,7 +160,7 @@ func (p *Parser) parseNextColumn() ([]byte, bool) {
 	return p.lineBytes[start:end], true
 }
 
-func (p *Parser) parseNumberColumn(v *int64) bool {
+func (p *StatsParser) parseNumberColumn(v *int64) bool {
 	col, ok := p.parseNextColumn()
 	if !ok {
 		return false
@@ -178,7 +179,7 @@ func (p *Parser) parseNumberColumn(v *int64) bool {
 	return true
 }
 
-func (p *Parser) decodePath(encodedPath []byte) bool {
+func (p *StatsParser) decodePath(encodedPath []byte) bool {
 	l, err := base64.StdEncoding.Decode(p.pathBuffer, encodedPath)
 	if err != nil {
 		p.error = ErrBadPath
@@ -193,12 +194,12 @@ func (p *Parser) decodePath(encodedPath []byte) bool {
 
 // FilterForFilesOlderThan alters Scan() so that it skips lines for entries
 // that are not files and not older than the given duration.
-func (p *Parser) FilterForFilesOlderThan(d time.Duration) {
+func (p *StatsParser) FilterForFilesOlderThan(d time.Duration) {
 	p.filter = p.filterForOldFiles
 	p.epochTimeDesired = time.Now().Add(-d).Unix()
 }
 
-func (p *Parser) filterForOldFiles() bool {
+func (p *StatsParser) filterForOldFiles() bool {
 	if p.EntryType != fileType {
 		return false
 	}
@@ -212,6 +213,6 @@ func (p *Parser) filterForOldFiles() bool {
 
 // Err returns the first non-EOF error that was encountered, available after
 // Scan() returns false.
-func (p *Parser) Err() error {
+func (p *StatsParser) Err() error {
 	return p.error
 }
