@@ -30,8 +30,10 @@ import (
 	"time"
 )
 
+// Error is the type of the constant Err* variables.
 type Error string
 
+// Error returns a string version of the error.
 func (e Error) Error() string { return string(e) }
 
 const (
@@ -45,6 +47,7 @@ const (
 	ErrTooFewColumns = Error("invalid file format: too few tab separated columns")
 )
 
+// Parser is used to parse wrstat stats files.
 type Parser struct {
 	scanner          *bufio.Scanner
 	pathBuffer       []byte
@@ -62,6 +65,7 @@ type Parser struct {
 	error            error
 }
 
+// New is used to create a new Parser, given uncompressed wrstat stats data.
 func New(r io.Reader) *Parser {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, maxLineLength), maxLineLength)
@@ -77,6 +81,13 @@ func noFilter() bool {
 	return true
 }
 
+// Scan is used to read the next line of stats data, which will then be
+// available through the Path, Size, GID, MTime, CTime and EntryType properties.
+//
+// It returns false when the scan stops, either by reaching the end of the input
+// or an error. After Scan returns false, the Err method will return any error
+// that occurred during scanning, except that if it was io.EOF, Err will return
+// nil.
 func (p *Parser) Scan() bool {
 	keepGoing := p.scanner.Scan()
 	if !keepGoing {
@@ -180,6 +191,8 @@ func (p *Parser) decodePath(encodedPath []byte) bool {
 	return true
 }
 
+// FilterForFilesOlderThan alters Scan() so that it skips lines for entries
+// that are not files and not older than the given duration.
 func (p *Parser) FilterForFilesOlderThan(d time.Duration) {
 	p.filter = p.filterForOldFiles
 	p.epochTimeDesired = time.Now().Add(-d).Unix()
@@ -197,7 +210,8 @@ func (p *Parser) filterForOldFiles() bool {
 	return true
 }
 
-// Err returns the first non-EOF error that was encountered by the Scanner.
+// Err returns the first non-EOF error that was encountered, available after
+// Scan() returns false.
 func (p *Parser) Err() error {
 	return p.error
 }
