@@ -51,8 +51,6 @@ func TestParseStats(t *testing.T) {
 		defer gr.Close()
 
 		p := NewStatsParser(gr)
-
-		So(err, ShouldBeNil)
 		So(p, ShouldNotBeNil)
 
 		Convey("you can get extract info for all entries", func() {
@@ -217,9 +215,6 @@ func TestBoMDirectoryStats(t *testing.T) {
 
 		p := NewStatsParser(gr)
 
-		So(err, ShouldBeNil)
-		So(p, ShouldNotBeNil)
-
 		bomFile, err := os.Open("bom.gids")
 		So(err, ShouldBeNil)
 
@@ -365,5 +360,65 @@ func BenchmarkRawScannerUncompressed(b *testing.B) {
 
 		gr.Close()
 		f.Close()
+	}
+}
+
+func BenchmarkBoMDirectoryStats(b *testing.B) {
+	tempDir := b.TempDir()
+	testStatsFile := filepath.Join(tempDir, "test.stats")
+
+	f, gr := openTestFile(b)
+
+	defer f.Close()
+	defer gr.Close()
+
+	outFile, err := os.Create(testStatsFile)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	_, err = io.Copy(outFile, gr)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	outFile.Close()
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		b.StopTimer()
+
+		f, err := os.Open(testStatsFile)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		defer f.Close()
+
+		p := NewStatsParser(f)
+
+		bomFile, err := os.Open("bom.gids")
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		defer bomFile.Close()
+
+		gtb, err := NewGIDToBoM(bomFile)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		b.StartTimer()
+
+		stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		if len(stats) == 0 {
+			b.Error("BoMDirectoryStats gave no results")
+		}
 	}
 }
