@@ -165,12 +165,12 @@ func TestParseStats(t *testing.T) {
 }
 
 func TestParseBomGIDs(t *testing.T) {
-	Convey("Given a bomgids file and a bomgids parser", t, func() {
+	Convey("Given a bomgids file and a GIDToBoM", t, func() {
 		f, err := os.Open("bom.gids")
 		So(err, ShouldBeNil)
 		defer f.Close()
 
-		p, err := NewBomGIDsParser(f)
+		p, err := NewGIDToBoM(f)
 		So(p, ShouldNotBeNil)
 		So(err, ShouldBeNil)
 
@@ -187,17 +187,17 @@ func TestParseBomGIDs(t *testing.T) {
 		})
 	})
 
-	Convey("Given invalid bomgids data, it fails to parse", t, func() {
-		_, err := NewBomGIDsParser(strings.NewReader("bom\tgid\n"))
+	Convey("Given invalid bomgids data, GIDToBoM fails to parse", t, func() {
+		_, err := NewGIDToBoM(strings.NewReader("bom\tgid\n"))
 		So(err, ShouldNotBeNil)
 
-		_, err = NewBomGIDsParser(strings.NewReader("bom\t123\t456\n"))
+		_, err = NewGIDToBoM(strings.NewReader("bom\t123\t456\n"))
 		So(err, ShouldNotBeNil)
 
-		_, err = NewBomGIDsParser(strings.NewReader("\n"))
+		_, err = NewGIDToBoM(strings.NewReader("\n"))
 		So(err, ShouldNotBeNil)
 
-		p, err := NewBomGIDsParser(strings.NewReader(""))
+		p, err := NewGIDToBoM(strings.NewReader(""))
 		So(err, ShouldBeNil)
 		So(len(p.gidToBom), ShouldEqual, 0)
 	})

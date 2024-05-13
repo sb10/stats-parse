@@ -35,25 +35,25 @@ const (
 	numBomGIDsColumns = 2
 )
 
-// BomGIDsParser is a parser for bom.gids files, which look like:
+// GIDTOBoM is a parser for bom.gids files, which look like:
 //
 //	bom1\tgid1,gid2
 //	bom2\tgid3,gid4,gid5
 //
-// and can tell you which bom any particular GID belongs to.
-type BomGIDsParser struct {
+// and can tell you which BoM any particular GID belongs to.
+type GIDTOBoM struct {
 	gidToBom map[int]string
 }
 
-// NewBomGIDsParser creates a new BomGIDsParser and parses the given bom.gids
-// data.
-func NewBomGIDsParser(r io.Reader) (*BomGIDsParser, error) {
+// NewGIDToBoM parses the given bom.gids data and returns a GIDTOBoM that can
+// tell you the BoM area a GID belongs to.
+func NewGIDToBoM(r io.Reader) (*GIDTOBoM, error) {
 	gidToBom, err := parseBomGIDsData(r)
 	if err != nil {
 		return nil, err
 	}
 
-	return &BomGIDsParser{
+	return &GIDTOBoM{
 		gidToBom: gidToBom,
 	}, nil
 }
@@ -65,21 +65,12 @@ func parseBomGIDsData(r io.Reader) (map[int]string, error) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
-		cols := strings.Split(line, "\t")
-		if len(cols) != numBomGIDsColumns {
-			return nil, Error("invalid bom.gids line: " + line)
+		bom, gids, err := parseBomGIDsLine(line)
+		if err != nil {
+			return nil, err
 		}
 
-		bom, gidsCSV := cols[0], cols[1]
-		bom = strings.ReplaceAll(bom, " ", "")
-		gids := strings.Split(gidsCSV, ",")
-
-		for _, gidStr := range gids {
-			gid, err := strconv.Atoi(gidStr)
-			if err != nil {
-				return nil, err
-			}
-
+		for _, gid := range gids {
 			gidToBom[gid] = bom
 		}
 	}
@@ -91,9 +82,43 @@ func parseBomGIDsData(r io.Reader) (map[int]string, error) {
 	return gidToBom, nil
 }
 
+func parseBomGIDsLine(line string) (string, []int, error) {
+	cols := strings.Split(line, "\t")
+	if len(cols) != numBomGIDsColumns {
+		return "", nil, Error("invalid bom.gids line: " + line)
+	}
+
+	rawBoM, gidsCSV := cols[0], cols[1]
+
+	bom := refomatBoM(rawBoM)
+	gids, err := gidsCSVtoGIDs(gidsCSV)
+
+	return bom, gids, err
+}
+
+func refomatBoM(rawBoM string) string {
+	return strings.ReplaceAll(rawBoM, " ", "")
+}
+
+func gidsCSVtoGIDs(gidsCSV string) ([]int, error) {
+	gidStrs := strings.Split(gidsCSV, ",")
+	gids := make([]int, len(gidStrs))
+
+	for i, gidStr := range gidStrs {
+		gid, err := strconv.Atoi(gidStr)
+		if err != nil {
+			return nil, err
+		}
+
+		gids[i] = gid
+	}
+
+	return gids, nil
+}
+
 // GetBom returns the BoM that the given group belongs to. Returns an error
 // if the given GID did not appear in the bom.gids data parsed.
-func (p *BomGIDsParser) GetBom(gid int) (string, error) {
+func (p *GIDTOBoM) GetBom(gid int) (string, error) {
 	bom, ok := p.gidToBom[gid]
 
 	if !ok {
