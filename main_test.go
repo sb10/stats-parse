@@ -164,7 +164,7 @@ func TestParseStats(t *testing.T) {
 	})
 }
 
-func TestParseBomGIDs(t *testing.T) {
+func TestGIDToBoM(t *testing.T) {
 	Convey("Given a bomgids file and a GIDToBoM", t, func() {
 		f, err := os.Open("bom.gids")
 		So(err, ShouldBeNil)
@@ -200,6 +200,59 @@ func TestParseBomGIDs(t *testing.T) {
 		p, err := NewGIDToBoM(strings.NewReader(""))
 		So(err, ShouldBeNil)
 		So(len(p.gidToBom), ShouldEqual, 0)
+	})
+}
+
+func TestBoMDirectoryStats(t *testing.T) {
+	Convey("Given a stats parser and a GIDToBoM", t, func() {
+		f, err := os.Open("test.stats.gz")
+		So(err, ShouldBeNil)
+
+		defer f.Close()
+
+		gr, err := gzip.NewReader(f)
+		So(err, ShouldBeNil)
+
+		defer gr.Close()
+
+		p := NewStatsParser(gr)
+
+		So(err, ShouldBeNil)
+		So(p, ShouldNotBeNil)
+
+		bomFile, err := os.Open("bom.gids")
+		So(err, ShouldBeNil)
+
+		defer bomFile.Close()
+
+		gtb, err := NewGIDToBoM(bomFile)
+		So(err, ShouldBeNil)
+
+		Convey("you can get the stats for every BoM directory", func() {
+			stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
+			So(err, ShouldBeNil)
+			So(len(stats), ShouldEqual, 11)
+
+			So(stats[0].BoM, ShouldEqual, "ToL")
+			So(stats[0].Directory, ShouldEqual, "")
+			So(stats[0].Count, ShouldEqual, 12)
+			So(stats[0].Size, ShouldEqual, 52880)
+
+			So(stats[1].Directory, ShouldEqual, "/lustre")
+			So(stats[2].Directory, ShouldEqual, "/lustre/scratch122")
+			So(stats[3].Directory, ShouldEqual, "/lustre/scratch122/tol")
+			So(stats[4].Directory, ShouldEqual, "/lustre/scratch122/tol/teams")
+			So(stats[5].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter")
+			So(stats[6].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users")
+			So(stats[7].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51")
+			So(stats[8].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software")
+			So(stats[8].Count, ShouldEqual, 6)
+			So(stats[9].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19")
+			So(stats[9].Count, ShouldEqual, 5)
+			So(stats[10].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9")
+			So(stats[10].Count, ShouldEqual, 1)
+			So(stats[9].Size+stats[10].Size, ShouldEqual, stats[8].Size)
+		})
 	})
 }
 

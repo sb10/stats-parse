@@ -35,25 +35,25 @@ const (
 	numBomGIDsColumns = 2
 )
 
-// GIDTOBoM is a parser for bom.gids files, which look like:
+// GIDToBoM is a parser for bom.gids files, which look like:
 //
 //	bom1\tgid1,gid2
 //	bom2\tgid3,gid4,gid5
 //
 // and can tell you which BoM any particular GID belongs to.
-type GIDTOBoM struct {
+type GIDToBoM struct {
 	gidToBom map[int]string
 }
 
 // NewGIDToBoM parses the given bom.gids data and returns a GIDTOBoM that can
 // tell you the BoM area a GID belongs to.
-func NewGIDToBoM(r io.Reader) (*GIDTOBoM, error) {
+func NewGIDToBoM(r io.Reader) (*GIDToBoM, error) {
 	gidToBom, err := parseBomGIDsData(r)
 	if err != nil {
 		return nil, err
 	}
 
-	return &GIDTOBoM{
+	return &GIDToBoM{
 		gidToBom: gidToBom,
 	}, nil
 }
@@ -118,7 +118,7 @@ func gidsCSVtoGIDs(gidsCSV string) ([]int, error) {
 
 // GetBom returns the BoM that the given group belongs to. Returns an error
 // if the given GID did not appear in the bom.gids data parsed.
-func (p *GIDTOBoM) GetBom(gid int) (string, error) {
+func (p *GIDToBoM) GetBom(gid int) (string, error) {
 	bom, ok := p.gidToBom[gid]
 
 	if !ok {

@@ -24,13 +24,9 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
-	"log"
 	"os"
-	"strconv"
-	"strings"
 )
 
 const helpText = `stats-parse parses wrstat stats.gz files quickly, in low mem.
@@ -57,7 +53,7 @@ Options:
   -b <string> path to bom.gids file
 `
 
-var l = log.New(os.Stderr, "", 0)
+// var l = log.New(os.Stderr, "", 0)
 
 func main() {
 	// arg handling
@@ -86,9 +82,6 @@ func main() {
 	if len(flag.Args()) < 1 {
 		exitHelp("ERROR: you must supply some stats.gz files")
 	}
-
-	// gidToBom := parseBomGids(bomGidsFile)
-	// parseStatsFiles(flag.Args(), gidToBom, age)
 }
 
 // exitHelp prints help text and exits 0, unless a message is passed in which
@@ -104,82 +97,20 @@ func exitHelp(msg string) {
 	os.Exit(0)
 }
 
-func die(err error) {
-	l.Printf("ERROR: %s", err.Error())
-	os.Exit(1)
-}
-
-func parseBomGids(bomGidsFile string) map[int]string {
-	// my %gid_to_bom; while (<$fh>) { chomp; my ($bom, $gids) = split("\t", $_);
-	// $bom =~ s/\s+//g; foreach my $gid (split(",", $gids)) { $gid_to_bom{$gid} = $bom } } close($fh);
-	gidToBom := make(map[int]string)
-
-	file, err := os.Open(bomGidsFile)
-	if err != nil {
-		die(err)
-	}
-
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		cols := strings.Split(line, "\t")
-		bom, gidsCSV := cols[0], cols[1]
-		bom = strings.ReplaceAll(bom, " ", "")
-		gids := strings.Split(gidsCSV, ",")
-
-		for _, gidStr := range gids {
-			gid, err := strconv.Atoi(gidStr)
-			if err != nil {
-				die(err)
-			}
-
-			gidToBom[gid] = bom
-		}
-	}
-
-	if scanner.Err() != nil {
-		die(scanner.Err())
-	}
-
-	return gidToBom
-}
-
-type stats struct {
-	count uint64
-	size  float64
-}
-
-type bomToDirToStats map[string]map[string]stats
-
-// func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
-// 	results := make(bomToDirToStats)
-
-// 	for _, path := range paths {
-// 		parseStatsFile(path, gidToBom, age, results)
-
-// 		break
-// 	}
+// func die(err error) {
+// 	l.Printf("ERROR: %s", err.Error())
+// 	os.Exit(1)
 // }
 
-// func parseStatsFile(path string, gidToBom map[int]string, age int64, results bomToDirToStats) {
-// 	f, err := os.Open(path)
-// 	if err != nil {
-// 		die(err)
-// 	}
+// type stats struct {
+// 	count uint64
+// 	size  float64
+// }
 
-// 	defer f.Close()
+// type bomToDirToStats map[string]map[string]stats
 
-// 	gr, err := gzip.NewReader(f)
-// 	if err != nil {
-// 		die(err)
-// 	}
-
-// 	defer gr.Close()
-
+// func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
 // 	parseStats(gr, gidToBom, age, results)
-
 // 	displayResults(results)
 // }
 
@@ -198,92 +129,6 @@ type bomToDirToStats map[string]map[string]stats
 // 	//   $d{$bom}{$dir}[0]++;
 // 	//   $d{$bom}{$dir}[1] += $cols[1] / $gb_convert;
 // 	// }
-
-// 	epochTimeDesiredYearsAgo := int(time.Now().Unix() - (secsPerYear * age))
-
-// 	path := make([]byte, base64.StdEncoding.DecodedLen(maxBase64EncodedPathLength))
-
-// 	lineNum := 0
-// 	numFound := 0
-
-// 	scanner := bufio.NewScanner(r)
-// 	for scanner.Scan() {
-// 		lineNum++
-// 		b := scanner.Bytes()
-
-// 		i := 0
-// 		for b[i] != '\t' {
-// 			i++
-// 		}
-
-// 		encodedPath := b[0:i]
-
-// 		var size int64
-
-// 		for i++; b[i] != '\t'; i++ {
-// 			size = size*10 + int64(b[i]) - '0'
-// 		}
-
-// 		i++
-// 		for b[i] != '\t' {
-// 			i++
-// 		}
-
-// 		var gid int
-
-// 		for i++; b[i] != '\t'; i++ {
-// 			gid = gid*10 + int(b[i]) - '0'
-// 		}
-
-// 		i++
-// 		for b[i] != '\t' {
-// 			i++
-// 		}
-
-// 		var mtime int
-
-// 		for i++; b[i] != '\t'; i++ {
-// 			mtime = mtime*10 + int(b[i]) - '0'
-// 		}
-
-// 		var ctime int
-
-// 		for i++; b[i] != '\t'; i++ {
-// 			ctime = ctime*10 + int(b[i]) - '0'
-// 		}
-
-// 		i++
-
-// 		if b[i] != fileType {
-// 			continue
-// 		}
-
-// 		if min(mtime, ctime) > epochTimeDesiredYearsAgo {
-// 			continue
-// 		}
-
-// 		bom, found := gidToBom[gid]
-// 		if !found {
-// 			continue
-// 		}
-
-// 		l, err := base64.StdEncoding.Decode(path, encodedPath)
-// 		if err != nil {
-// 			die(err)
-// 		}
-
-// 		fmt.Printf("%d: %s, %d, %d, %d, %d, %s\n", lineNum, string(path[:l]), size, gid, mtime, ctime, bom)
-// 		numFound++
-
-// 		if numFound > 5 {
-// 			break
-// 		}
-// 	}
-
-// 	if scanner.Err() != nil {
-// 		die(scanner.Err())
-// 	}
-// }
 
 // func displayResults(results bomToDirToStats) {
 // 	// while (my ($bom, $dirs) = each %d) {
