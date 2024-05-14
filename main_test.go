@@ -74,7 +74,7 @@ func TestParseStats(t *testing.T) {
 			So(p.Err(), ShouldBeNil)
 		})
 
-		Convey("you can get extract info for files older than the specified age", func() {
+		Convey("you can extract info for files older than the specified age", func() {
 			p.FilterForFilesOlderThan(yearsRelativeToTestFileCreation(7))
 
 			i := 0
