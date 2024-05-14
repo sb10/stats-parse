@@ -25,22 +25,28 @@ package main
 
 import (
 	"cmp"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+	"unsafe"
 )
 
-const dirSeparator = string(filepath.Separator)
-
 type Stats struct {
-	BoM       string
+	BoM       []byte
 	Directory string
 	Count     uint64
 	Size      int64 // in bytes
 }
 
-type bomDirKey [2]string
+type bomDirKey struct {
+	bom       string
+	directory string
+}
+
+func newBomDirKey(bom, dir []byte) bomDirKey {
+	return bomDirKey{unsafe.String(&bom[0], len(bom)), unsafe.String(&dir[0], len(dir))}
+}
+
 type bomDirectoryStats map[bomDirKey]*Stats
 
 // BoMDirectoryStats uses the given StatsParser and GIDToBoM to find the number
@@ -66,32 +72,30 @@ func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (bomDirectoryStats, err
 			return nil, err
 		}
 
-		leafDir := filepath.Dir(string(sp.Path))
-		dirs := strings.Split(leafDir, dirSeparator)
-
-		accumulateDirStats(dirs, sp, bom, bomToDirToStats)
+		accumulateDirStats(sp.Path, sp, bom, bomToDirToStats)
 	}
 
 	return bomToDirToStats, nil
 }
 
-func accumulateDirStats(dirs []string, sp *StatsParser, bom string, bomToDirToStats bomDirectoryStats) {
-	for i := range dirs {
-		thisDir := strings.Join(dirs[0:i], dirSeparator)
-		thisDir = strings.TrimSuffix(thisDir, dirSeparator)
-		key := bomDirKey{bom, thisDir}
+func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToDirToStats bomDirectoryStats) {
+	for i, b := range fullPath {
+		if b == '/' {
+			thisDir := fullPath[0 : i+1]
+			key := newBomDirKey(bom, thisDir)
 
-		stats, ok := bomToDirToStats[key]
-		if !ok {
-			stats = &Stats{
-				BoM:       bom,
-				Directory: thisDir,
+			stats, ok := bomToDirToStats[key]
+			if !ok {
+				stats = &Stats{
+					BoM:       bom,
+					Directory: string(thisDir[0 : len(thisDir)-1]),
+				}
+				bomToDirToStats[key] = stats
 			}
-			bomToDirToStats[key] = stats
-		}
 
-		stats.Count++
-		stats.Size += sp.Size
+			stats.Count++
+			stats.Size += sp.Size
+		}
 	}
 }
 
@@ -107,7 +111,11 @@ func sortBoMDirectoryStats(bds bomDirectoryStats) []*Stats {
 			return n
 		}
 
-		return cmp.Compare(strings.Count(a.Directory, "/"), strings.Count(b.Directory, "/"))
+		if n := cmp.Compare(strings.Count(a.Directory, "/"), strings.Count(b.Directory, "/")); n != 0 {
+			return n
+		}
+
+		return cmp.Compare(a.Directory, b.Directory)
 	})
 
 	return results

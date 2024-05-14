@@ -226,12 +226,12 @@ func TestBoMDirectoryStats(t *testing.T) {
 		Convey("you can get the stats for every BoM directory", func() {
 			stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
 			So(err, ShouldBeNil)
-			So(len(stats), ShouldEqual, 11)
+			So(len(stats), ShouldEqual, 14)
 
-			So(stats[0].BoM, ShouldEqual, "ToL")
+			So(string(stats[0].BoM), ShouldEqual, "ToL")
 			So(stats[0].Directory, ShouldEqual, "")
-			So(stats[0].Count, ShouldEqual, 12)
-			So(stats[0].Size, ShouldEqual, 52880)
+			So(stats[0].Count, ShouldEqual, 6)
+			So(stats[0].Size, ShouldEqual, 26440)
 
 			So(stats[1].Directory, ShouldEqual, "/lustre")
 			So(stats[2].Directory, ShouldEqual, "/lustre/scratch122")
@@ -244,9 +244,17 @@ func TestBoMDirectoryStats(t *testing.T) {
 			So(stats[8].Count, ShouldEqual, 6)
 			So(stats[9].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19")
 			So(stats[9].Count, ShouldEqual, 5)
-			So(stats[10].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9")
-			So(stats[10].Count, ShouldEqual, 1)
-			So(stats[9].Size+stats[10].Size, ShouldEqual, stats[8].Size)
+			So(stats[10].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/test")
+			So(stats[10].Count, ShouldEqual, 4)
+			So(stats[11].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/doc")
+			So(stats[11].Count, ShouldEqual, 1)
+			So(stats[10].Size+stats[11].Size, ShouldEqual, stats[9].Size)
+			So(stats[12].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9")
+			So(stats[12].Count, ShouldEqual, 1)
+			So(stats[9].Size+stats[12].Size, ShouldEqual, stats[8].Size)
+			So(stats[13].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9") //nolint:lll
+			So(stats[13].Count, ShouldEqual, 1)
+			So(stats[13].Size, ShouldEqual, stats[12].Size)
 		})
 	})
 }
