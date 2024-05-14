@@ -25,9 +25,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"strconv"
-	"strings"
 )
 
 const (
@@ -42,7 +42,7 @@ const (
 //
 // and can tell you which BoM any particular GID belongs to.
 type GIDToBoM struct {
-	gidToBom map[int]string
+	gidToBom map[int][]byte
 }
 
 // NewGIDToBoM parses the given bom.gids data and returns a GIDTOBoM that can
@@ -58,12 +58,12 @@ func NewGIDToBoM(r io.Reader) (*GIDToBoM, error) {
 	}, nil
 }
 
-func parseBomGIDsData(r io.Reader) (map[int]string, error) {
-	gidToBom := make(map[int]string)
+func parseBomGIDsData(r io.Reader) (map[int][]byte, error) {
+	gidToBom := make(map[int][]byte)
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := bytes.TrimSpace(scanner.Bytes())
 
 		bom, gids, err := parseBomGIDsLine(line)
 		if err != nil {
@@ -82,10 +82,10 @@ func parseBomGIDsData(r io.Reader) (map[int]string, error) {
 	return gidToBom, nil
 }
 
-func parseBomGIDsLine(line string) (string, []int, error) {
-	cols := strings.Split(line, "\t")
+func parseBomGIDsLine(line []byte) ([]byte, []int, error) {
+	cols := bytes.Split(line, []byte{'\t'})
 	if len(cols) != numBomGIDsColumns {
-		return "", nil, Error("invalid bom.gids line: " + line)
+		return nil, nil, Error("invalid bom.gids line: " + string(line))
 	}
 
 	rawBoM, gidsCSV := cols[0], cols[1]
@@ -96,16 +96,16 @@ func parseBomGIDsLine(line string) (string, []int, error) {
 	return bom, gids, err
 }
 
-func refomatBoM(rawBoM string) string {
-	return strings.ReplaceAll(rawBoM, " ", "")
+func refomatBoM(rawBoM []byte) []byte {
+	return bytes.ReplaceAll(rawBoM, []byte{' '}, []byte{})
 }
 
-func gidsCSVtoGIDs(gidsCSV string) ([]int, error) {
-	gidStrs := strings.Split(gidsCSV, ",")
+func gidsCSVtoGIDs(gidsCSV []byte) ([]int, error) {
+	gidStrs := bytes.Split(gidsCSV, []byte{','})
 	gids := make([]int, len(gidStrs))
 
 	for i, gidStr := range gidStrs {
-		gid, err := strconv.Atoi(gidStr)
+		gid, err := strconv.Atoi(string(gidStr))
 		if err != nil {
 			return nil, err
 		}
@@ -118,11 +118,11 @@ func gidsCSVtoGIDs(gidsCSV string) ([]int, error) {
 
 // GetBom returns the BoM that the given group belongs to. Returns an error
 // if the given GID did not appear in the bom.gids data parsed.
-func (p *GIDToBoM) GetBom(gid int) (string, error) {
+func (p *GIDToBoM) GetBom(gid int) ([]byte, error) {
 	bom, ok := p.gidToBom[gid]
 
 	if !ok {
-		return "", ErrInvalidGID
+		return nil, ErrInvalidGID
 	}
 
 	return bom, nil

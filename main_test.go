@@ -175,13 +175,13 @@ func TestGIDToBoM(t *testing.T) {
 		Convey("you can get the bom of a GID", func() {
 			bom, err := p.GetBom(15660)
 			So(err, ShouldBeNil)
-			So(bom, ShouldEqual, "HumanGenetics")
+			So(string(bom), ShouldEqual, "HumanGenetics")
 		})
 
 		Convey("an error is returned if the GID is invalid", func() {
 			bom, err := p.GetBom(123456789)
 			So(err, ShouldEqual, ErrInvalidGID)
-			So(bom, ShouldEqual, "")
+			So(string(bom), ShouldEqual, "")
 		})
 	})
 
@@ -394,16 +394,12 @@ func BenchmarkBoMDirectoryStats(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		defer f.Close()
-
 		p := NewStatsParser(f)
 
 		bomFile, err := os.Open("bom.gids")
 		if err != nil {
 			b.Fatal(err)
 		}
-
-		defer bomFile.Close()
 
 		gtb, err := NewGIDToBoM(bomFile)
 		if err != nil {
@@ -416,6 +412,9 @@ func BenchmarkBoMDirectoryStats(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+
+		f.Close()
+		bomFile.Close()
 
 		if len(stats) == 0 {
 			b.Error("BoMDirectoryStats gave no results")
