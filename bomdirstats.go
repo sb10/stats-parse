@@ -25,7 +25,6 @@ package main
 
 import (
 	"cmp"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -53,10 +52,8 @@ func BoMDirectoryStats(sp *StatsParser, gp *GIDToBoM, d time.Duration) ([]*Stats
 	return sortBoMDirectoryStats(bomToDirToStats), nil
 }
 
-func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) ([]*Stats, error) {
+func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (map[string]*Stats, error) {
 	bomToStats := make(map[string]*Stats)
-
-	var results []*Stats
 
 	for sp.Scan() {
 		bom, err := gp.GetBom(int(sp.GID))
@@ -64,13 +61,13 @@ func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) ([]*Stats, error) {
 			return nil, err
 		}
 
-		results = accumulateDirStats(sp.Path, sp, bom, bomToStats, results)
+		accumulateDirStats(sp.Path, sp, bom, bomToStats)
 	}
 
-	return results, nil
+	return bomToStats, nil
 }
 
-func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToStats map[string]*Stats, results []*Stats) []*Stats {
+func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToStats map[string]*Stats) {
 	stats, ok := bomToStats[string(bom)]
 	if !ok {
 		stats = &Stats{
@@ -78,48 +75,59 @@ func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToStats
 			Directory: "/",
 		}
 		bomToStats[string(bom)] = stats
-		results = append(results, stats)
 	}
 
 	stats.Count++
 	stats.Size += sp.Size
 
 	for i, b := range fullPath {
-		if i == 0 {
-			continue
-		}
-
 		if b == '/' {
 			thisDir := fullPath[0:i]
-
-			newChild := &Stats{
-				BoM:       bom,
-				Directory: string(thisDir),
+			if len(thisDir) == 0 {
+				continue
 			}
 
-			var exists bool
+			exists := false
 
-			i, exists := slices.BinarySearchFunc(stats.children, newChild, func(a, b *Stats) int {
-				return cmp.Compare(a.Directory, b.Directory)
-			})
+			for _, c := range stats.children {
+				if c.Directory == string(thisDir) {
+					exists = true
+					stats = c
 
-			if exists {
-				stats = stats.children[i]
-			} else {
-				stats.children = slices.Insert(stats.children, i, newChild)
-				stats = newChild
-				results = append(results, newChild)
+					break
+				}
+			}
+
+			if !exists {
+				stats.children = append(stats.children, &Stats{
+					BoM:       stats.BoM,
+					Directory: string(thisDir),
+				})
+				stats = stats.children[len(stats.children)-1]
 			}
 
 			stats.Count++
 			stats.Size += sp.Size
 		}
 	}
+}
+
+func checkChild(parent *Stats, results []*Stats) []*Stats {
+	for _, c := range parent.children {
+		results = append(results, c)
+		results = checkChild(c, results)
+	}
 
 	return results
 }
 
-func sortBoMDirectoryStats(results []*Stats) []*Stats {
+func sortBoMDirectoryStats(bds map[string]*Stats) []*Stats {
+	results := make([]*Stats, 0, len(bds))
+	for _, stats := range bds {
+		results = append(results, stats)
+		results = checkChild(stats, results)
+	}
+
 	slices.SortFunc(results, func(a, b *Stats) int {
 		if n := cmp.Compare(b.Size, a.Size); n != 0 {
 			return n
@@ -132,14 +140,5 @@ func sortBoMDirectoryStats(results []*Stats) []*Stats {
 		return cmp.Compare(a.Directory, b.Directory)
 	})
 
-	// printStats(results)
-
 	return results
-}
-
-func printStats(results []*Stats) {
-	fmt.Println("")
-	for _, stats := range results {
-		fmt.Printf("%s\t%d\t%d\n", stats.Directory, stats.Count, stats.Size)
-	}
 }
