@@ -25,9 +25,9 @@ package main
 
 import (
 	"cmp"
+	"fmt"
 	"io"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -123,40 +123,16 @@ func sortBoMDirectoryStats(bds bomDirectoryStats) []*Stats {
 	return results
 }
 
-// PrintBoMDirectoryStats writes the output of BoMDirectoryStats in the form:
-// BoM	Directory	Count	Size
+// PrintBoMDirectoryStats takes BoMDirectoryStats() stats and writes them as
+// a TSV:
+//
+//	BoM	Directory	Count	Size
+//
+// With one line per Stats.
 func PrintBoMDirectoryStats(w io.Writer, stats []*Stats) error {
-	var err error
-	for _, stat := range stats {
-		if _, err = w.Write(stat.BoM); err != nil {
-			return err
-		}
-
-		if _, err = w.Write([]byte{'\t'}); err != nil {
-			return err
-		}
-
-		if _, err = w.Write([]byte(stat.Directory)); err != nil {
-			return err
-		}
-
-		if _, err = w.Write([]byte{'\t'}); err != nil {
-			return err
-		}
-
-		if _, err = w.Write([]byte(strconv.Itoa(int(stat.Count)))); err != nil {
-			return err
-		}
-
-		if _, err = w.Write([]byte{'\t'}); err != nil {
-			return err
-		}
-
-		if _, err = w.Write([]byte(strconv.Itoa(int(stat.Size)))); err != nil {
-			return err
-		}
-
-		if _, err = w.Write([]byte{'\n'}); err != nil {
+	for _, s := range stats {
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%d\t%d\n",
+			string(s.BoM), s.Directory, s.Count, s.Size); err != nil {
 			return err
 		}
 	}
