@@ -229,7 +229,7 @@ func TestBoMDirectoryStats(t *testing.T) {
 			So(len(stats), ShouldEqual, 14)
 
 			So(string(stats[0].BoM), ShouldEqual, "ToL")
-			So(stats[0].Directory, ShouldEqual, "/")
+			So(stats[0].Directory, ShouldEqual, "")
 			So(stats[0].Count, ShouldEqual, 6)
 			So(stats[0].Size, ShouldEqual, 26440)
 
