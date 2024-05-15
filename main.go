@@ -104,16 +104,21 @@ func main() {
 
 	w := bufio.NewWriter(os.Stdout)
 
-	for _, s := range stats {
-		_, err = w.Write(s.BoM)
-		if err != nil {
-			die(err)
-		}
+	// for _, s := range stats {
+	// 	_, err = w.Write(s.BoM)
+	// 	if err != nil {
+	// 		die(err)
+	// 	}
 
-		_, err = w.Write([]byte(fmt.Sprintf("\t%s\t%d\t%d\n", s.Directory, s.Count, s.Size)))
-		if err != nil {
-			die(err)
-		}
+	// 	_, err = w.Write([]byte(fmt.Sprintf("\t%s\t%d\t%d\n", s.Directory, s.Count, s.Size)))
+	// 	if err != nil {
+	// 		die(err)
+	// 	}
+	// }
+
+	err = PrintBoMDirectoryStats(w, stats)
+	if err != nil {
+		die(err)
 	}
 
 	err = w.Flush()

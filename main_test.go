@@ -25,6 +25,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"io"
 	"os"
@@ -255,6 +256,31 @@ func TestBoMDirectoryStats(t *testing.T) {
 			So(stats[13].Directory, ShouldEqual, "/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9") //nolint:lll
 			So(stats[13].Count, ShouldEqual, 1)
 			So(stats[13].Size, ShouldEqual, stats[12].Size)
+
+			Convey("and print them out as a tsv", func() {
+				expectedTSV := `ToL		6	26440
+ToL	/lustre	6	26440
+ToL	/lustre/scratch122	6	26440
+ToL	/lustre/scratch122/tol	6	26440
+ToL	/lustre/scratch122/tol/teams	6	26440
+ToL	/lustre/scratch122/tol/teams/blaxter	6	26440
+ToL	/lustre/scratch122/tol/teams/blaxter/users	6	26440
+ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51	6	26440
+ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51/software	6	26440
+ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19	5	23248
+ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/test	4	16879
+ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/doc	1	6369
+ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9	1	3192
+ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9	1	3192
+`
+
+				var b bytes.Buffer
+
+				err := PrintBoMDirectoryStats(&b, stats)
+
+				So(err, ShouldBeNil)
+				So(b.String(), ShouldEqual, expectedTSV)
+			})
 		})
 	})
 }

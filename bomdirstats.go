@@ -25,7 +25,9 @@ package main
 
 import (
 	"cmp"
+	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -119,4 +121,45 @@ func sortBoMDirectoryStats(bds bomDirectoryStats) []*Stats {
 	})
 
 	return results
+}
+
+// PrintBoMDirectoryStats writes the output of BoMDirectoryStats in the form:
+// BoM	Directory	Count	Size
+func PrintBoMDirectoryStats(w io.Writer, stats []*Stats) error {
+	var err error
+	for _, stat := range stats {
+		if _, err = w.Write(stat.BoM); err != nil {
+			return err
+		}
+
+		if _, err = w.Write([]byte{'\t'}); err != nil {
+			return err
+		}
+
+		if _, err = w.Write([]byte(stat.Directory)); err != nil {
+			return err
+		}
+
+		if _, err = w.Write([]byte{'\t'}); err != nil {
+			return err
+		}
+
+		if _, err = w.Write([]byte(strconv.Itoa(int(stat.Count)))); err != nil {
+			return err
+		}
+
+		if _, err = w.Write([]byte{'\t'}); err != nil {
+			return err
+		}
+
+		if _, err = w.Write([]byte(strconv.Itoa(int(stat.Size)))); err != nil {
+			return err
+		}
+
+		if _, err = w.Write([]byte{'\n'}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
