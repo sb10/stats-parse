@@ -57,18 +57,22 @@ Options:
   -b <string> path to bom.gids file
 `
 
-var l = log.New(os.Stderr, "", 0)
+const (
+	hoursInDay  = 24
+	daysPerYear = 356
+)
+
+var l = log.New(os.Stderr, "", 0) //nolint:gochecknoglobals
 
 func main() {
-	// arg handling
 	var (
 		help        = flag.Bool("h", false, "print help text")
 		bomGidsFile string
-		age         int64
+		age         int
 	)
 
 	flag.StringVar(&bomGidsFile, "b", "", "path to bom.gids file")
-	flag.Int64Var(&age, "a", defaultAge, "age of files to report on (years, per oldest of c&mtime)")
+	flag.IntVar(&age, "a", defaultAge, "age of files to report on (years, per oldest of c&mtime)")
 	flag.Parse()
 
 	if *help {
@@ -83,52 +87,9 @@ func main() {
 		exitHelp("ERROR: -a must be greater than 0")
 	}
 
-	bomFile, err := os.Open("bom.gids")
-	if err != nil {
-		die(err)
-	}
-
-	defer bomFile.Close()
-
-	gtb, err := NewGIDToBoM(bomFile)
-	if err != nil {
-		die(err)
-	}
-
-	p := NewStatsParser(os.Stdin)
-
-	stats, err := BoMDirectoryStats(p, gtb, time.Duration(age*365*24)*time.Hour)
-	if err != nil {
-		die(err)
-	}
-
-	w := bufio.NewWriter(os.Stdout)
-
-	// for _, s := range stats {
-	// 	_, err = w.Write(s.BoM)
-	// 	if err != nil {
-	// 		die(err)
-	// 	}
-
-	// 	_, err = w.Write([]byte(fmt.Sprintf("\t%s\t%d\t%d\n", s.Directory, s.Count, s.Size)))
-	// 	if err != nil {
-	// 		die(err)
-	// 	}
-	// }
-
-	err = PrintBoMDirectoryStats(w, stats)
-	if err != nil {
-		die(err)
-	}
-
-	err = w.Flush()
-	if err != nil {
-		die(err)
-	}
-
-	// for _, s := range stats {
-	// 	fmt.Printf("%s\t%s\t%d\t%d\n", string(s.BoM), s.Directory, s.Count, s.Size)
-	// }
+	gtb := parseBoMGIDsFile(bomGidsFile)
+	stats := parseStdin(gtb, age)
+	printStats(stats)
 }
 
 // exitHelp prints help text and exits 0, unless a message is passed in which
@@ -142,6 +103,47 @@ func exitHelp(msg string) {
 	}
 
 	os.Exit(0)
+}
+
+func parseBoMGIDsFile(path string) *GIDToBoM {
+	bomGIDsFile, err := os.Open(path)
+	if err != nil {
+		die(err)
+	}
+
+	defer bomGIDsFile.Close()
+
+	gtb, err := NewGIDToBoM(bomGIDsFile)
+	if err != nil {
+		die(err)
+	}
+
+	return gtb
+}
+
+func parseStdin(gtb *GIDToBoM, age int) []*Stats {
+	p := NewStatsParser(os.Stdin)
+
+	stats, err := BoMDirectoryStats(p, gtb, time.Duration(age*daysPerYear*hoursInDay)*time.Hour)
+	if err != nil {
+		die(err)
+	}
+
+	return stats
+}
+
+func printStats(stats []*Stats) {
+	w := bufio.NewWriter(os.Stdout)
+
+	err := PrintBoMDirectoryStats(w, stats)
+	if err != nil {
+		die(err)
+	}
+
+	err = w.Flush()
+	if err != nil {
+		die(err)
+	}
 }
 
 func die(err error) {

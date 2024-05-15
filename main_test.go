@@ -440,6 +440,8 @@ func BenchmarkBoMDirectoryStats(b *testing.B) {
 			b.Fatal(err)
 		}
 
+		var outB bytes.Buffer
+
 		b.StartTimer()
 
 		stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
@@ -452,6 +454,11 @@ func BenchmarkBoMDirectoryStats(b *testing.B) {
 
 		if len(stats) == 0 {
 			b.Error("BoMDirectoryStats gave no results")
+		}
+
+		err = PrintBoMDirectoryStats(&outB, stats)
+		if err != nil {
+			b.Fatal(err)
 		}
 	}
 }
