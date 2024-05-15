@@ -24,9 +24,12 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"time"
 )
 
 const helpText = `stats-parse parses wrstat stats.gz files quickly, in low mem.
@@ -37,23 +40,24 @@ cat /nfs/wrstat/bom.areas | perl -e '%b; while (<>) { chomp; ($g, $b) =
 	split(",", $_); $gid = getgrnam($g); push(@{$b{$b}}, $gid); } for $b (sort
 	keys %b) { print "$b\t", join(",", @{$b{$b}}), "\n" }' > bom.gids
 
-Specify the path to this file with -b, and also supply the paths to one or more
-wrstat stats.gz files as positional arguments.
+Specify the path to this file with -b, and also pipe in the uncompressed data
+from one or more wrstat stats.gz files.
 
 It will produce tsv output with columns:
+* bom
 * directory
 * number of files older than -a years nested within the directory
 * size of files (GiB) older than -a years nested within the directory
 Where age is determined using the oldest of c and m time.
 
-Usage: stats-parse -a <int> -b <path> wrstat.stats.gz
+Usage: zcat wrstat.stats.gz | stats-parse -a <int> -b <path>
 Options:
   -h          this help text
   -a <int>    age of files to report on (years, per oldest of c&mtime)
   -b <string> path to bom.gids file
 `
 
-// var l = log.New(os.Stderr, "", 0)
+var l = log.New(os.Stderr, "", 0)
 
 func main() {
 	// arg handling
@@ -79,9 +83,47 @@ func main() {
 		exitHelp("ERROR: -a must be greater than 0")
 	}
 
-	if len(flag.Args()) < 1 {
-		exitHelp("ERROR: you must supply some stats.gz files")
+	bomFile, err := os.Open("bom.gids")
+	if err != nil {
+		die(err)
 	}
+
+	defer bomFile.Close()
+
+	gtb, err := NewGIDToBoM(bomFile)
+	if err != nil {
+		die(err)
+	}
+
+	p := NewStatsParser(os.Stdin)
+
+	stats, err := BoMDirectoryStats(p, gtb, time.Duration(age*365*24)*time.Hour)
+	if err != nil {
+		die(err)
+	}
+
+	w := bufio.NewWriter(os.Stdout)
+
+	for _, s := range stats {
+		_, err = w.Write(s.BoM)
+		if err != nil {
+			die(err)
+		}
+
+		_, err = w.Write([]byte(fmt.Sprintf("\t%s\t%d\t%d\n", s.Directory, s.Count, s.Size)))
+		if err != nil {
+			die(err)
+		}
+	}
+
+	err = w.Flush()
+	if err != nil {
+		die(err)
+	}
+
+	// for _, s := range stats {
+	// 	fmt.Printf("%s\t%s\t%d\t%d\n", string(s.BoM), s.Directory, s.Count, s.Size)
+	// }
 }
 
 // exitHelp prints help text and exits 0, unless a message is passed in which
@@ -97,52 +139,7 @@ func exitHelp(msg string) {
 	os.Exit(0)
 }
 
-// func die(err error) {
-// 	l.Printf("ERROR: %s", err.Error())
-// 	os.Exit(1)
-// }
-
-// type stats struct {
-// 	count uint64
-// 	size  float64
-// }
-
-// type bomToDirToStats map[string]map[string]stats
-
-// func parseStatsFiles(paths []string, gidToBom map[int]string, age int64) {
-// 	parseStats(gr, gidToBom, age, results)
-// 	displayResults(results)
-// }
-
-// func parseStats(r io.Reader, gidToBom map[int]string, age int64, results bomToDirToStats) {
-// 	// my @cols = split("\t", $_);
-// 	// next if $cols[7] ne "f";
-// 	// my $t = min($cols[5], $cols[6]);
-// 	// next if $t > $years_ago;
-// 	// my $bom = $gid_to_bom{$cols[3]} || next;
-// 	// my $path = decode_base64($cols[0]);
-// 	// my (undef, $dir, undef) = File::Spec->splitpath($path);
-// 	// my @dirs = File::Spec->splitdir($dir);
-// 	// for my $i (0 .. $#dirs) {
-// 	//   my $dir = join("/", @dirs[0..$i]);
-// 	//   $dir =~ s/\/*$//;
-// 	//   $d{$bom}{$dir}[0]++;
-// 	//   $d{$bom}{$dir}[1] += $cols[1] / $gb_convert;
-// 	// }
-
-// func displayResults(results bomToDirToStats) {
-// 	// while (my ($bom, $dirs) = each %d) {
-// 	//   open(my $fh, ">$bom.tsv");
-// 	//   foreach my $dir (sort { $a =~ tr/\/// <=> $b =~ tr/\/// || $a cmp $b } keys %{$dirs}) {
-// 	//     my $stats = $dirs->{$dir};
-// 	//     my $gb = sprintf("%.2f", $stats->[1]);
-// 	//     print $fh "$dir\t$stats->[0]\t$gb\n"
-// 	//    }
-
-// 	for bom, dirStats := range results {
-// 		for dir, stats := range dirStats {
-// 			gb := fmt.Sprintf("%.2f", stats.size)
-// 			fmt.Printf("%s\t%s\t%d\t%s\n", bom, dir, stats.count, gb)
-// 		}
-// 	}
-// }
+func die(err error) {
+	l.Printf("ERROR: %s", err.Error())
+	os.Exit(1)
+}
