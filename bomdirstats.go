@@ -28,7 +28,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unsafe"
 )
 
 type Stats struct {
@@ -36,18 +35,8 @@ type Stats struct {
 	Directory string
 	Count     uint64
 	Size      int64 // in bytes
+	children  []*Stats
 }
-
-type bomDirKey struct {
-	bom       string
-	directory string
-}
-
-func newBomDirKey(bom, dir []byte) bomDirKey {
-	return bomDirKey{unsafe.String(&bom[0], len(bom)), unsafe.String(&dir[0], len(dir))}
-}
-
-type bomDirectoryStats map[bomDirKey]*Stats
 
 // BoMDirectoryStats uses the given StatsParser and GIDToBoM to find the number
 // and size of all files belonging to each BoM area that are older than the
@@ -63,8 +52,8 @@ func BoMDirectoryStats(sp *StatsParser, gp *GIDToBoM, d time.Duration) ([]*Stats
 	return sortBoMDirectoryStats(bomToDirToStats), nil
 }
 
-func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (bomDirectoryStats, error) {
-	bomToDirToStats := make(bomDirectoryStats)
+func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (map[string]*Stats, error) {
+	bomToStats := make(map[string]*Stats)
 
 	for sp.Scan() {
 		bom, err := gp.GetBom(int(sp.GID))
@@ -72,25 +61,49 @@ func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (bomDirectoryStats, err
 			return nil, err
 		}
 
-		accumulateDirStats(sp.Path, sp, bom, bomToDirToStats)
+		accumulateDirStats(sp.Path, sp, bom, bomToStats)
 	}
 
-	return bomToDirToStats, nil
+	return bomToStats, nil
 }
 
-func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToDirToStats bomDirectoryStats) {
+func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToStats map[string]*Stats) {
+	stats, ok := bomToStats[string(bom)]
+	if !ok {
+		stats = &Stats{
+			BoM:       bom,
+			Directory: "/",
+		}
+		bomToStats[string(bom)] = stats
+	}
+
+	stats.Count++
+	stats.Size += sp.Size
+
 	for i, b := range fullPath {
 		if b == '/' {
-			thisDir := fullPath[0 : i+1]
-			key := newBomDirKey(bom, thisDir)
+			thisDir := fullPath[0:i]
+			if len(thisDir) == 0 {
+				continue
+			}
 
-			stats, ok := bomToDirToStats[key]
-			if !ok {
-				stats = &Stats{
-					BoM:       bom,
-					Directory: string(thisDir[0 : len(thisDir)-1]),
+			exists := false
+
+			for _, c := range stats.children {
+				if c.Directory == string(thisDir) {
+					exists = true
+					stats = c
+
+					break
 				}
-				bomToDirToStats[key] = stats
+			}
+
+			if !exists {
+				stats.children = append(stats.children, &Stats{
+					BoM:       stats.BoM,
+					Directory: string(thisDir),
+				})
+				stats = stats.children[len(stats.children)-1]
 			}
 
 			stats.Count++
@@ -99,11 +112,20 @@ func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToDirTo
 	}
 }
 
-func sortBoMDirectoryStats(bds bomDirectoryStats) []*Stats {
-	results := make([]*Stats, 0, len(bds))
+func checkChild(parent *Stats, results []*Stats) []*Stats {
+	for _, c := range parent.children {
+		results = append(results, c)
+		results = checkChild(c, results)
+	}
 
+	return results
+}
+
+func sortBoMDirectoryStats(bds map[string]*Stats) []*Stats {
+	results := make([]*Stats, 0, len(bds))
 	for _, stats := range bds {
 		results = append(results, stats)
+		results = checkChild(stats, results)
 	}
 
 	slices.SortFunc(results, func(a, b *Stats) int {
