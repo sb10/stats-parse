@@ -24,7 +24,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -44,15 +43,16 @@ Specify the path to this file with -b, and also pipe in the uncompressed data
 from one or more wrstat stats.gz files.
 
 It will produce tsv output with columns:
-* bom
 * directory
 * number of files older than -a years nested within the directory
 * size of files (GiB) older than -a years nested within the directory
-Where age is determined using the oldest of c and m time.
+Where age is determined using the oldest of c and m time. One file per BoM area
+will be created, named [-p].[bom area].tsv.
 
 Usage: zcat wrstat.stats.gz | stats-parse -a <int> -b <path>
 Options:
   -h          this help text
+  -o <string> prefix path to output files
   -a <int>    age of files to report on (years, per oldest of c&mtime)
   -b <string> path to bom.gids file
 `
@@ -67,10 +67,12 @@ var l = log.New(os.Stderr, "", 0) //nolint:gochecknoglobals
 func main() {
 	var (
 		help        = flag.Bool("h", false, "print help text")
+		prefix      string
 		bomGidsFile string
 		age         int
 	)
 
+	flag.StringVar(&prefix, "o", "output", "prefix path to output files")
 	flag.StringVar(&bomGidsFile, "b", "", "path to bom.gids file")
 	flag.IntVar(&age, "a", defaultAge, "age of files to report on (years, per oldest of c&mtime)")
 	flag.Parse()
@@ -89,7 +91,7 @@ func main() {
 
 	gtb := parseBoMGIDsFile(bomGidsFile)
 	stats := parseStdin(gtb, age)
-	printStats(stats)
+	printStats(prefix, stats)
 }
 
 // exitHelp prints help text and exits 0, unless a message is passed in which
@@ -132,15 +134,8 @@ func parseStdin(gtb *GIDToBoM, age int) []*Stats {
 	return stats
 }
 
-func printStats(stats []*Stats) {
-	w := bufio.NewWriter(os.Stdout)
-
-	err := PrintBoMDirectoryStats(w, stats)
-	if err != nil {
-		die(err)
-	}
-
-	err = w.Flush()
+func printStats(prefix string, stats []*Stats) {
+	err := PrintBoMDirectoryStats(prefix, stats)
 	if err != nil {
 		die(err)
 	}

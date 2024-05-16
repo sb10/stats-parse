@@ -26,7 +26,7 @@ package main
 import (
 	"cmp"
 	"fmt"
-	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -126,13 +126,30 @@ func sortBoMDirectoryStats(bds bomDirectoryStats) []*Stats {
 // PrintBoMDirectoryStats takes BoMDirectoryStats() stats and writes them as
 // a TSV:
 //
-//	BoM	Directory	Count	Size
+//	Directory	Count	Size
 //
-// With one line per Stats.
-func PrintBoMDirectoryStats(w io.Writer, stats []*Stats) error {
+// With one line per Stats and one file per BoM area, with files named after
+// the given path suffixed with ".[bom name].tsv".
+func PrintBoMDirectoryStats(path string, stats []*Stats) error {
+	writers := make(map[string]*os.File)
+
 	for _, s := range stats {
-		if _, err := fmt.Fprintf(w, "%s\t%s\t%d\t%d\n",
-			string(s.BoM), s.Directory, s.Count, s.Size); err != nil {
+		file, ok := writers[string(s.BoM)]
+		if !ok {
+			var err error
+
+			file, err = os.Create(fmt.Sprintf("%s.%s.tsv", path, s.BoM))
+			if err != nil {
+				return err
+			}
+
+			defer file.Close()
+
+			writers[string(s.BoM)] = file
+		}
+
+		if _, err := fmt.Fprintf(file, "%s\t%d\t%d\n",
+			s.Directory, s.Count, s.Size); err != nil {
 			return err
 		}
 	}
