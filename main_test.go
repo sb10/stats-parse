@@ -282,6 +282,12 @@ ToL	/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib
 				So(b.String(), ShouldEqual, expectedTSV)
 			})
 		})
+
+		Convey("an error is provided when bad data is given", func() {
+			p = NewStatsParser(strings.NewReader("this is invalid since there's no tabs\n"))
+			_, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
+			So(err, ShouldNotBeNil)
+		})
 	})
 }
 

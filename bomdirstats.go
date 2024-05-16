@@ -77,7 +77,7 @@ func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (bomDirectoryStats, err
 		accumulateDirStats(sp.Path, sp, bom, bomToDirToStats)
 	}
 
-	return bomToDirToStats, nil
+	return bomToDirToStats, sp.Err()
 }
 
 func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToDirToStats bomDirectoryStats) {
