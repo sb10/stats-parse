@@ -33,6 +33,11 @@ import (
 	"unsafe"
 )
 
+const (
+	bytesPerKiB = 1024
+	bytesPerGiB = (bytesPerKiB * bytesPerKiB * bytesPerKiB)
+)
+
 type Stats struct {
 	BoM       []byte
 	Directory string
@@ -148,8 +153,8 @@ func PrintBoMDirectoryStats(path string, stats []*Stats) error {
 			writers[string(s.BoM)] = file
 		}
 
-		if _, err := fmt.Fprintf(file, "%s\t%d\t%d\n",
-			s.Directory, s.Count, s.Size); err != nil {
+		if _, err := fmt.Fprintf(file, "%s\t%d\t%.2f\n",
+			s.Directory, s.Count, float64(s.Size)/bytesPerGiB); err != nil {
 			return err
 		}
 	}

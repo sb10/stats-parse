@@ -257,20 +257,20 @@ func TestBoMDirectoryStats(t *testing.T) {
 			So(stats[13].Size, ShouldEqual, stats[12].Size)
 
 			Convey("and print them out as a tsv", func() {
-				expectedTSV := `	6	26440
-/lustre	6	26440
-/lustre/scratch122	6	26440
-/lustre/scratch122/tol	6	26440
-/lustre/scratch122/tol/teams	6	26440
-/lustre/scratch122/tol/teams/blaxter	6	26440
-/lustre/scratch122/tol/teams/blaxter/users	6	26440
-/lustre/scratch122/tol/teams/blaxter/users/cc51	6	26440
-/lustre/scratch122/tol/teams/blaxter/users/cc51/software	6	26440
-/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19	5	23248
-/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/test	4	16879
-/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/doc	1	6369
-/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9	1	3192
-/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9	1	3192
+				expectedTSV := `	6	0.00
+/lustre	6	0.00
+/lustre/scratch122	6	0.00
+/lustre/scratch122/tol	6	0.00
+/lustre/scratch122/tol/teams	6	0.00
+/lustre/scratch122/tol/teams/blaxter	6	0.00
+/lustre/scratch122/tol/teams/blaxter/users	6	0.00
+/lustre/scratch122/tol/teams/blaxter/users/cc51	6	0.00
+/lustre/scratch122/tol/teams/blaxter/users/cc51/software	6	0.00
+/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19	5	0.00
+/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/test	4	0.00
+/lustre/scratch122/tol/teams/blaxter/users/cc51/software/bcftools-1.19/doc	1	0.00
+/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9	1	0.00
+/lustre/scratch122/tol/teams/blaxter/users/cc51/software/samtools-1.9/htslib-1.9	1	0.00
 `
 
 				tempDir := t.TempDir()
@@ -286,7 +286,7 @@ func TestBoMDirectoryStats(t *testing.T) {
 			})
 		})
 
-		SkipConvey("you can get the stats for different BoMs", func() {
+		Convey("you can get the stats for different BoMs", func() {
 			f, err = os.Open("test2.stats")
 			So(err, ShouldBeNil)
 
@@ -296,15 +296,21 @@ func TestBoMDirectoryStats(t *testing.T) {
 
 			stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
 			So(err, ShouldBeNil)
-			So(len(stats), ShouldEqual, 14)
+			So(len(stats), ShouldEqual, 6)
 
-			So(string(stats[0].BoM), ShouldEqual, "CASM")
+			So(string(stats[0].BoM), ShouldEqual, "HumanGenetics")
 			So(stats[0].Directory, ShouldEqual, "")
 			So(stats[0].Count, ShouldEqual, 1)
-			So(stats[0].Size, ShouldEqual, 1611000000000)
-
+			So(stats[0].Size, ShouldEqual, 2523300000)
 			So(stats[1].Directory, ShouldEqual, "/a")
-			So(stats[2].Directory, ShouldEqual, "/a/b")
+			So(stats[2].Directory, ShouldEqual, "/a/c")
+
+			So(string(stats[3].BoM), ShouldEqual, "CASM")
+			So(stats[3].Directory, ShouldEqual, "")
+			So(stats[3].Count, ShouldEqual, 1)
+			So(stats[3].Size, ShouldEqual, 1611000000)
+			So(stats[4].Directory, ShouldEqual, "/a")
+			So(stats[5].Directory, ShouldEqual, "/a/b")
 
 			Convey("and print their sizes in GiBs", func() {
 				tempDir := t.TempDir()
@@ -313,13 +319,13 @@ func TestBoMDirectoryStats(t *testing.T) {
 				err = PrintBoMDirectoryStats(prefix, stats)
 				So(err, ShouldBeNil)
 
-				b, err := os.ReadFile(prefix + ".CASM.tsv")
+				b, err := os.ReadFile(prefix + ".HumanGenetics.tsv")
 				So(err, ShouldBeNil)
-				So(string(b), ShouldEqual, `1	1.50`)
+				So(string(b), ShouldEqual, "\t1\t2.35\n/a\t1\t2.35\n/a/c\t1\t2.35\n")
 
-				b, err = os.ReadFile(prefix + ".HumanGenetics.tsv")
+				b, err = os.ReadFile(prefix + ".CASM.tsv")
 				So(err, ShouldBeNil)
-				So(string(b), ShouldEqual, `1	2.35`)
+				So(string(b), ShouldEqual, "\t1\t1.50\n/a\t1\t1.50\n/a/b\t1\t1.50\n")
 			})
 		})
 
