@@ -329,7 +329,7 @@ func TestBoMDirectoryStats(t *testing.T) {
 			})
 		})
 
-		Convey("you can get the stats for more complicated data", func() {
+		Convey("you can get the stats in more complicated data", func() {
 			f, err := os.Open("test3.stats.gz")
 			So(err, ShouldBeNil)
 
@@ -345,19 +345,62 @@ func TestBoMDirectoryStats(t *testing.T) {
 			stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
 			So(err, ShouldBeNil)
 
-			dirs := make(map[string]bool)
-			dups := 0
+			Convey("and there are no duplicates", func() {
+				dirs := make(map[string]bool)
+				dups := 0
 
-			for _, s := range stats {
-				key := string(s.BoM) + ":" + s.Directory
-				if dirs[key] {
-					dups++
-				} else {
-					dirs[key] = true
+				for _, s := range stats {
+					key := string(s.BoM) + ":" + s.Directory
+					if dirs[key] {
+						dups++
+					} else {
+						dirs[key] = true
+					}
 				}
-			}
 
-			So(dups, ShouldEqual, 0)
+				So(dups, ShouldEqual, 0)
+			})
+
+			Convey("and there are no missing directories", func() {
+				for retry := 0; retry < 10; retry++ {
+					f, err = os.Open("test3.stats.gz")
+					So(err, ShouldBeNil)
+
+					defer f.Close()
+
+					gz, err := gzip.NewReader(f)
+					So(err, ShouldBeNil)
+
+					defer gz.Close()
+
+					p = NewStatsParser(gz)
+
+					stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
+					So(err, ShouldBeNil)
+
+					uniqueDirs := make(map[string]bool)
+					wrongDirs := make(map[string]bool)
+
+					for _, s := range stats {
+						wrongDirs[s.Directory] = true
+
+						dirs := strings.Split(s.Directory, "/")
+						for i := 1; i < len(dirs); i++ {
+							dir := strings.Join(dirs[:i], "/")
+
+							if dir != "" {
+								uniqueDirs[dir] = true
+							}
+						}
+					}
+
+					for dir := range wrongDirs {
+						delete(uniqueDirs, dir)
+					}
+
+					So(len(uniqueDirs), ShouldEqual, 0)
+				}
+			})
 		})
 
 		Convey("an error is provided when bad data is given", func() {
