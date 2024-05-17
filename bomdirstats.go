@@ -30,12 +30,12 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unsafe"
 )
 
 const (
-	bytesPerKiB = 1024
-	bytesPerGiB = (bytesPerKiB * bytesPerKiB * bytesPerKiB)
+	bytesPerKiB     = 1024
+	bytesPerGiB     = (bytesPerKiB * bytesPerKiB * bytesPerKiB)
+	bomDirSeparator = ":"
 )
 
 type Stats struct {
@@ -45,16 +45,7 @@ type Stats struct {
 	Size      int64 // in bytes
 }
 
-type bomDirKey struct {
-	bom       string
-	directory string
-}
-
-func newBomDirKey(bom, dir []byte) bomDirKey {
-	return bomDirKey{unsafe.String(&bom[0], len(bom)), unsafe.String(&dir[0], len(dir))}
-}
-
-type bomDirectoryStats map[bomDirKey]*Stats
+type bomDirectoryStats map[string]*Stats
 
 // BoMDirectoryStats uses the given StatsParser and GIDToBoM to find the number
 // and size of all files belonging to each BoM area that are older than the
@@ -88,14 +79,20 @@ func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (bomDirectoryStats, err
 func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToDirToStats bomDirectoryStats) {
 	for i, b := range fullPath {
 		if b == '/' {
-			thisDir := fullPath[0 : i+1]
-			key := newBomDirKey(bom, thisDir)
+			end := i
+			if i == 0 {
+				end = i + 1
+			}
+
+			thisDir := string(fullPath[0:end])
+
+			key := string(bom) + bomDirSeparator + thisDir
 
 			stats, ok := bomToDirToStats[key]
 			if !ok {
 				stats = &Stats{
 					BoM:       bom,
-					Directory: string(thisDir[0 : len(thisDir)-1]),
+					Directory: thisDir,
 				}
 				bomToDirToStats[key] = stats
 			}

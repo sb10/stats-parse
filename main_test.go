@@ -229,7 +229,7 @@ func TestBoMDirectoryStats(t *testing.T) {
 			So(len(stats), ShouldEqual, 14)
 
 			So(string(stats[0].BoM), ShouldEqual, "ToL")
-			So(stats[0].Directory, ShouldEqual, "")
+			So(stats[0].Directory, ShouldEqual, "/")
 			So(stats[0].Count, ShouldEqual, 6)
 			So(stats[0].Size, ShouldEqual, 26440)
 
@@ -257,7 +257,7 @@ func TestBoMDirectoryStats(t *testing.T) {
 			So(stats[13].Size, ShouldEqual, stats[12].Size)
 
 			Convey("and print them out as a tsv", func() {
-				expectedTSV := `	6	0.00
+				expectedTSV := `/	6	0.00
 /lustre	6	0.00
 /lustre/scratch122	6	0.00
 /lustre/scratch122/tol	6	0.00
@@ -299,14 +299,14 @@ func TestBoMDirectoryStats(t *testing.T) {
 			So(len(stats), ShouldEqual, 6)
 
 			So(string(stats[0].BoM), ShouldEqual, "HumanGenetics")
-			So(stats[0].Directory, ShouldEqual, "")
+			So(stats[0].Directory, ShouldEqual, "/")
 			So(stats[0].Count, ShouldEqual, 1)
 			So(stats[0].Size, ShouldEqual, 2523300000)
 			So(stats[1].Directory, ShouldEqual, "/a")
 			So(stats[2].Directory, ShouldEqual, "/a/c")
 
 			So(string(stats[3].BoM), ShouldEqual, "CASM")
-			So(stats[3].Directory, ShouldEqual, "")
+			So(stats[3].Directory, ShouldEqual, "/")
 			So(stats[3].Count, ShouldEqual, 1)
 			So(stats[3].Size, ShouldEqual, 1611000000)
 			So(stats[4].Directory, ShouldEqual, "/a")
@@ -321,12 +321,43 @@ func TestBoMDirectoryStats(t *testing.T) {
 
 				b, err := os.ReadFile(prefix + ".HumanGenetics.tsv")
 				So(err, ShouldBeNil)
-				So(string(b), ShouldEqual, "\t1\t2.35\n/a\t1\t2.35\n/a/c\t1\t2.35\n")
+				So(string(b), ShouldEqual, "/\t1\t2.35\n/a\t1\t2.35\n/a/c\t1\t2.35\n")
 
 				b, err = os.ReadFile(prefix + ".CASM.tsv")
 				So(err, ShouldBeNil)
-				So(string(b), ShouldEqual, "\t1\t1.50\n/a\t1\t1.50\n/a/b\t1\t1.50\n")
+				So(string(b), ShouldEqual, "/\t1\t1.50\n/a\t1\t1.50\n/a/b\t1\t1.50\n")
 			})
+		})
+
+		Convey("you can get the stats for more complicated data", func() {
+			f, err := os.Open("test3.stats.gz")
+			So(err, ShouldBeNil)
+
+			defer f.Close()
+
+			gr, err := gzip.NewReader(f)
+			So(err, ShouldBeNil)
+
+			defer gr.Close()
+
+			p = NewStatsParser(gr)
+
+			stats, err := BoMDirectoryStats(p, gtb, yearsRelativeToTestFileCreation(7))
+			So(err, ShouldBeNil)
+
+			dirs := make(map[string]bool)
+			dups := 0
+
+			for _, s := range stats {
+				key := string(s.BoM) + ":" + s.Directory
+				if dirs[key] {
+					dups++
+				} else {
+					dirs[key] = true
+				}
+			}
+
+			So(dups, ShouldEqual, 0)
 		})
 
 		Convey("an error is provided when bad data is given", func() {
