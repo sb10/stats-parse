@@ -78,28 +78,30 @@ func getBoMDirectoryStats(sp *StatsParser, gp *GIDToBoM) (bomDirectoryStats, err
 
 func accumulateDirStats(fullPath []byte, sp *StatsParser, bom []byte, bomToDirToStats bomDirectoryStats) {
 	for i, b := range fullPath {
-		if b == '/' {
-			end := i
-			if i == 0 {
-				end = i + 1
-			}
-
-			thisDir := string(fullPath[0:end])
-
-			key := string(bom) + bomDirSeparator + thisDir
-
-			stats, ok := bomToDirToStats[key]
-			if !ok {
-				stats = &Stats{
-					BoM:       bom,
-					Directory: thisDir,
-				}
-				bomToDirToStats[key] = stats
-			}
-
-			stats.Count++
-			stats.Size += sp.Size
+		if b != '/' {
+			continue
 		}
+
+		end := i
+		if i == 0 {
+			end = i + 1
+		}
+
+		thisDir := string(fullPath[0:end])
+
+		key := string(bom) + bomDirSeparator + thisDir
+
+		stats, ok := bomToDirToStats[key]
+		if !ok {
+			stats = &Stats{
+				BoM:       bom,
+				Directory: thisDir,
+			}
+			bomToDirToStats[key] = stats
+		}
+
+		stats.Count++
+		stats.Size += sp.Size
 	}
 }
 
